@@ -1,0 +1,123 @@
+# =====================================================================
+#  DOKUMEN INTERNAL — SENGAJA TIDAK DIUNGGAH
+# =====================================================================
+# Berkas-berkas di bawah ini TETAP ADA di komputer pengembang dan tetap
+# dipakai bekerja seperti biasa. Yang dicegah hanya satu hal: ikut
+# terunggah ke GitHub.
+#
+# Alasannya: source code boleh dibaca siapa pun yang perlu memeliharanya,
+# tapi kumpulan aturan, alasan di balik tiap keputusan, riwayat cacat, dan
+# hasil pengujian adalah hasil kerja yang tidak ikut dibagikan. Orang bisa
+# membaca kodenya tanpa ikut memiliki peta lengkapnya.
+#
+# JANGAN hapus baris-baris ini. Menghapus satu baris berarti dokumen itu
+# akan ikut terunggah pada commit berikutnya, dan sesudah terunggah ia ada
+# selamanya di riwayat git walaupun dihapus lagi kemudian.
+# ---------------------------------------------------------------------
+
+# Aturan & blueprint proyek
+/AGENTS.md
+/BLUEPRINT.md
+/CHANGELOG-TEKNIS.md
+/CLAUDE.md
+/README.md
+/README_JPOS.md
+
+# Laporan pengujian & penggabungan (potret tiap versi)
+/LAPORAN_UAT.md
+/LAPORAN_PENGGABUNGAN_2.1.0.md
+/LAPORAN_*.md
+/laporan-*.md
+/audit_report.md
+/audit-*.md
+/AUDIT*.md
+/UAT*.md
+
+# Aturan & konfigurasi alat agen AI — yang ada sekarang maupun yang
+# mungkin dibuat alat lain nanti. Semuanya memuat aturan proyek ini.
+/.agents/
+/.claude/
+/.codex/
+/.cursor/
+/.windsurf/
+/.antigravity/
+/.gemini/
+/.junie/
+/.trae/
+/.continue/
+/.roo/
+/.cline*
+/.aider*
+/.specstory/
+/.github/copilot-instructions.md
+/.mcp.json
+/GEMINI.md
+/QWEN.md
+/AGENT.md
+/AGENT*.md
+
+# Keluaran graphify: knowledge graph hasil bangkitan (17 MB). Memetakan
+# seluruh struktur proyek — dibangun ulang dari kode kalau diperlukan.
+/graphify-out/
+
+# Paket hasil build (.exe/.zip untuk client) — artefak, bukan sumber
+/dist
+
+
+# =====================================================================
+#  DATA CLIENT & RAHASIA — TIDAK BOLEH IKUT DALAM KEADAAN APA PUN
+# =====================================================================
+.env
+.env.backup
+.env.production
+.env.uat
+/auth.json
+/storage/*.key
+*.log
+
+# Database toko. Satu berkas .sqlite yang terunggah = seluruh data
+# penjualan client terbuka di internet.
+/database/*.sqlite
+/database/*.sqlite-wal
+/database/*.sqlite-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Salinan backup & berkas unggahan milik toko
+/storage/app/private
+/storage/app/public/logo
+/storage/app/public/products
+
+
+# =====================================================================
+#  HASIL BANGKITAN & BERKAS ALAT
+# =====================================================================
+/vendor
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/public/fonts-manifest.dev.json
+/public/vendor/*.map
+/storage/pail
+_ide_helper.php
+Homestead.json
+Homestead.yaml
+
+# Penanda "jendela masih terbuka" yang ditulis saat aplikasi berjalan —
+# bukan sumber kode.
+/storage/framework/jpos-detak
+
+# Cache & konfigurasi editor
+.phpactor.json
+.phpunit.result.cache
+/.phpunit.cache
+/.idea
+/.nova
+/.vscode
+/.zed
+
+# Sampah sistem operasi
+.DS_Store
+Thumbs.db

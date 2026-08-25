@@ -1,0 +1,12 @@
+/*
+ * Sumber untuk public/vendor/jpos.css.
+ *
+ * Sengaja hanya berisi direktif Tailwind. Blok <style> berisi class kustom
+ * (.nav-link, .btn, .card, .form-input, dst) tetap dibiarkan inline di
+ * resources/views/layouts/app.blade.php - memindahkannya ke sini akan mengubah
+ * urutan cascade dan berisiko menggeser tampilan, padahal targetnya justru
+ * tampilan yang identik.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
