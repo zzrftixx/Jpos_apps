@@ -64,7 +64,17 @@
             </div>
 
             <div class="flex items-center gap-2 mt-3">
+                    {{-- Pesanan yang masih menunggu DP maupun yang sudah lunas sama-sama bisa
+                         dicetak ulang dalam dua bentuk: struk untuk pelanggan, invoice untuk arsip
+                         toko atau lampiran penagihan. Di sinilah pelanggan yang butuh dua-duanya
+                         dilayani - bukan lewat satu tombol yang membuka dua jendela sekaligus,
+                         karena jendela keduanya diblokir peramban. --}}
+                    @if($pilihDokumen)
+                        <a href="{{ route('kasir.receipt', $o) }}?dokumen=struk" target="_blank" class="btn btn-outline flex-1 justify-center text-sm">🖨️ Struk</a>
+                        <a href="{{ route('kasir.receipt', $o) }}?dokumen=invoice" target="_blank" class="btn btn-outline flex-1 justify-center text-sm">📄 Invoice</a>
+                    @else
                 <a href="{{ route('kasir.receipt', $o) }}" target="_blank" class="btn btn-outline flex-1 justify-center text-sm">🖨️ Struk</a>
+                    @endif
                 @if($o->order_status === 'waiting')
                 <a href="{{ route('kasir.waiting-list.edit', $o) }}" class="btn btn-outline justify-center text-sm">✏️ Edit</a>
                 <button @click='openPay(@json(["id" => $o->id, "invoice_no" => $o->invoice_no, "remaining" => $o->remaining]))' class="btn btn-primary flex-1 justify-center text-sm">Lunasi</button>

@@ -230,7 +230,7 @@ class SettingController extends Controller
             'layout' => ['required', 'in:simple,normal,tabel,invoice'],
             'header_note' => ['nullable', 'string'],
             'footer_note' => ['nullable', 'string'],
-            'dokumen_default' => ['nullable', 'in:struk,invoice,keduanya'],
+            'dokumen_default' => ['nullable', 'in:struk,invoice'],
         ]);
 
         // Pilihan dokumen saat bayar. Mati secara bawaan: toko yang sudah berjalan tidak

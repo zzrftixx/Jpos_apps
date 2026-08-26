@@ -74,9 +74,9 @@
                     <span>
                         <span class="font-medium">Tanya bentuk dokumen setiap kali bayar</span>
                         <span class="block text-xs text-slate-500 mt-0.5">
-                            Kasir memilih sendiri: <strong>Struk</strong>, <strong>Invoice</strong>, atau
-                            <strong>keduanya sekaligus</strong>. Berguna kalau sebagian pelanggan cuma
-                            perlu struk, sementara yang belanja banyak minta rincian lengkap.
+                            Kasir memilih sendiri: <strong>Struk</strong> atau <strong>Invoice</strong>,
+                            saat bayar maupun saat mencetak ulang pesanan. Berguna kalau sebagian
+                            pelanggan cuma perlu struk, sementara yang belanja banyak minta rincian.
                         </span>
                     </span>
                 </label>
@@ -89,9 +89,6 @@
                         </label>
                         <label class="flex-1 text-center py-2 cursor-pointer border-l" :class="dokumenDefault === 'invoice' ? 'bg-brand-500 text-white' : 'bg-white text-slate-600'">
                             <input type="radio" name="dokumen_default" value="invoice" x-model="dokumenDefault" class="hidden"> Invoice
-                        </label>
-                        <label class="flex-1 text-center py-2 cursor-pointer border-l" :class="dokumenDefault === 'keduanya' ? 'bg-brand-500 text-white' : 'bg-white text-slate-600'">
-                            <input type="radio" name="dokumen_default" value="keduanya" x-model="dokumenDefault" class="hidden"> Keduanya
                         </label>
                     </div>
 

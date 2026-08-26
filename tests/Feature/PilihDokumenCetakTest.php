@@ -7,7 +7,7 @@ use App\Models\Setting;
 use Tests\JposTestCase;
 
 /**
- * Pilihan bentuk dokumen saat bayar: Struk / Invoice / Keduanya.
+ * Pilihan bentuk dokumen: Struk atau Invoice.
  *
  * Invoice sendiri sudah ada sejak 2.1.0, tapi sebagai SATU pilihan global - toko harus
  * memilih satu bentuk untuk semua transaksi. Yang ditambahkan di sini adalah jalur
@@ -63,10 +63,10 @@ class PilihDokumenCetakTest extends JposTestCase
 
         $html = $this->actingAs($this->kasir)->get(route('kasir.index'))->assertOk()->getContent();
 
-        $this->assertStringNotContainsString('dokumen=invoice', $html);
+        $this->assertStringNotContainsString('dokumen=', $html);
         // Label tombolnya dibangun Alpine lewat x-text, jadi yang dicari adalah sumbernya -
-        // bukan teks 'Keduanya' yang memang tidak pernah ada sebagai HTML.
-        $this->assertStringNotContainsString("label: 'Keduanya'", $html);
+        // bukan teks 'Invoice' yang memang tidak pernah ada sebagai HTML di sini.
+        $this->assertStringNotContainsString("label: 'Invoice'", $html);
         // Tanpa fitur ini, struk dibuka apa adanya - persis seperti sebelumnya.
         $this->assertStringContainsString("window.open(alamatStruk, '_blank')", $html);
     }
@@ -146,20 +146,19 @@ class PilihDokumenCetakTest extends JposTestCase
             'layout' => 'tabel',
             'footer_note' => 'Terima kasih',
             'pilih_dokumen' => '1',
-            'dokumen_default' => 'keduanya',
+            'dokumen_default' => 'invoice',
         ])->assertSessionHasNoErrors();
 
         $tersimpan = Setting::get('template_struk', []);
 
         $this->assertTrue($tersimpan['pilih_dokumen']);
-        $this->assertSame('keduanya', $tersimpan['dokumen_default']);
+        $this->assertSame('invoice', $tersimpan['dokumen_default']);
 
         $html = $this->actingAs($this->kasir)->get(route('kasir.index'))->assertOk()->getContent();
 
-        $this->assertStringContainsString("label: 'Keduanya'", $html);
-        $this->assertStringContainsString('dokumenCetak', $html);
+        $this->assertStringContainsString("label: 'Invoice'", $html);
         // Pilihan yang tersorot saat layar dibuka mengikuti pengaturan, bukan selalu Struk.
-        $this->assertStringContainsString('dokumenCetak: "keduanya"', $html);
+        $this->assertStringContainsString('dokumenCetak: "invoice"', $html);
     }
 
     /** Centang dilepas -> tersimpan mati, bukan diabaikan. */
@@ -186,6 +185,29 @@ class PilihDokumenCetakTest extends JposTestCase
         ])->assertSessionHasErrors('dokumen_default');
     }
 
+    /**
+     * "Keduanya" dicabut di 2.9.1 - jendela keduanya diblokir peramban dan tidak pernah
+     * benar-benar terbuka di komputer client. Nilai lama yang mungkin sudah tersimpan tidak
+     * boleh membuat halaman kasir menampilkan pilihan yang sudah tidak ada.
+     */
+    public function test_nilai_keduanya_yang_sudah_dicabut_jatuh_kembali_ke_struk(): void
+    {
+        $this->aturTemplate(['pilih_dokumen' => true, 'dokumen_default' => 'keduanya']);
+
+        $html = $this->actingAs($this->kasir)->get(route('kasir.index'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('dokumenCetak: "struk"', $html);
+        $this->assertStringNotContainsString("label: 'Keduanya'", $html);
+
+        // Disimpan ulang lewat form pun ditolak, bukan diterima diam-diam.
+        $this->actingAs($this->admin)->post('/pengaturan/template-struk', [
+            'layout' => 'tabel',
+            'footer_note' => 'Terima kasih',
+            'pilih_dokumen' => '1',
+            'dokumen_default' => 'keduanya',
+        ])->assertSessionHasErrors('dokumen_default');
+    }
+
     // -----------------------------------------------------------------
     // Meja kasir
     // -----------------------------------------------------------------
@@ -196,30 +218,82 @@ class PilihDokumenCetakTest extends JposTestCase
 
         $html = $this->actingAs($this->kasir)->get(route('kasir.index'))->assertOk()->getContent();
 
-        foreach (["nilai: 'struk'", "nilai: 'invoice'", "nilai: 'keduanya'"] as $pilihan) {
+        foreach (["nilai: 'struk'", "nilai: 'invoice'"] as $pilihan) {
             $this->assertStringContainsString($pilihan, $html);
         }
 
-        // "Keduanya" membuka dua jendela - struk dulu, lalu invoice.
-        $this->assertStringContainsString("['struk', 'invoice']", $html);
+        $this->assertStringNotContainsString("label: 'Keduanya'", $html);
+
+        // SATU jendela, selalu. Dua jendela sekaligus pernah dicoba dan yang kedua diblokir.
+        $this->assertStringContainsString(
+            "window.open(alamatStruk + '?dokumen=' + this.dokumenCetak, '_blank')", $html);
+        $this->assertStringNotContainsString('dokumenTertahan', $html);
+    }
+
+    // -----------------------------------------------------------------
+    // Pesanan / Waiting List - cetak ulang
+    // -----------------------------------------------------------------
+
+    private function pesananDp(): Sale
+    {
+        $produk = $this->makeProduct(['name' => 'Semen Gresik', 'stock' => 50, 'sell_price' => 60000]);
+
+        $this->actingAs($this->kasir)->postJson('/kasir', [
+            'items' => [['product_id' => $produk->id, 'qty' => 5]],
+            'paid_amount' => 100000,
+            'payment_method' => 'cash',
+            'is_waiting_list' => true,
+        ])->assertOk();
+
+        return Sale::latest('id')->firstOrFail();
     }
 
     /**
-     * Jendela yang diblokir peramban tidak boleh berakhir sebagai kebingungan diam.
+     * Pesanan yang MASIH MENUNGGU DP bisa dicetak dalam dua bentuk.
      *
-     * Transaksinya sudah tersimpan di server saat itu terjadi; yang gagal hanya membuka
-     * halaman cetaknya. Halaman sengaja TIDAK dimuat ulang supaya tautan penggantinya tidak
-     * ikut hilang bersamanya.
+     * Justru di sini invoice paling sering dibutuhkan: pesanan besar yang belum lunas adalah
+     * yang paling perlu rincian tertulis - pembelinya membawa pulang bukti pesanan, tokonya
+     * menyimpan lampiran penagihan.
      */
-    public function test_jendela_yang_diblokir_ditawarkan_sebagai_tautan(): void
+    public function test_pesanan_menunggu_dp_bisa_dicetak_struk_atau_invoice(): void
     {
-        $this->aturTemplate(['pilih_dokumen' => true, 'dokumen_default' => 'keduanya']);
+        $this->aturTemplate(['pilih_dokumen' => true]);
+        $p = $this->pesananDp();
 
-        $html = $this->actingAs($this->kasir)->get(route('kasir.index'))->assertOk()->getContent();
+        $this->assertSame('waiting', $p->order_status);
 
-        $this->assertStringContainsString('dokumenTertahan', $html);
-        $this->assertStringContainsString('jendela cetak diblokir peramban', $html);
-        $this->assertStringContainsString('if (semuaTerbuka) window.location.reload();', $html,
-            'Halaman dimuat ulang tanpa syarat - tautan dokumen yang tertahan akan ikut hilang.');
+        $html = $this->actingAs($this->kasir)
+            ->get(route('kasir.waiting-list'))->assertOk()->getContent();
+
+        $this->assertStringContainsString(route('kasir.receipt', $p) . '?dokumen=struk', $html);
+        $this->assertStringContainsString(route('kasir.receipt', $p) . '?dokumen=invoice', $html);
+    }
+
+    /** Yang sudah LUNAS juga - pelanggan sering kembali meminta invoicenya belakangan. */
+    public function test_pesanan_lunas_bisa_dicetak_struk_atau_invoice(): void
+    {
+        $this->aturTemplate(['pilih_dokumen' => true]);
+        $t = $this->transaksi();
+
+        $this->assertSame('completed', $t->order_status);
+
+        $html = $this->actingAs($this->kasir)
+            ->get(route('kasir.waiting-list', ['status' => 'completed']))->assertOk()->getContent();
+
+        $this->assertStringContainsString(route('kasir.receipt', $t) . '?dokumen=struk', $html);
+        $this->assertStringContainsString(route('kasir.receipt', $t) . '?dokumen=invoice', $html);
+    }
+
+    /** Fitur mati -> satu tombol Struk apa adanya, persis seperti sebelumnya. */
+    public function test_pesanan_hanya_punya_satu_tombol_saat_fitur_mati(): void
+    {
+        $this->aturTemplate();
+        $this->pesananDp();
+
+        $html = $this->actingAs($this->kasir)
+            ->get(route('kasir.waiting-list'))->assertOk()->getContent();
+
+        $this->assertStringNotContainsString('?dokumen=', $html);
+        $this->assertStringContainsString('Struk', $html);
     }
 }

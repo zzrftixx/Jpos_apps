@@ -50,7 +50,10 @@ class KasirController extends Controller
         // Disaring, bukan dipakai apa adanya: nilainya berakhir di dalam <script> halaman
         // kasir, dan baris pengaturan yang pernah disunting tangan tidak boleh bisa
         // menuliskan apa pun ke sana.
-        $dokumenDefault = in_array($templateStruk['dokumen_default'] ?? null, ['struk', 'invoice', 'keduanya'], true)
+        // Instalasi yang sempat menyimpan 'keduanya' jatuh kembali ke 'struk' lewat saringan
+        // ini - tidak perlu migrasi, dan tidak ada layar yang menampilkan pilihan yang sudah
+        // tidak ada. Lihat CHANGELOG 2.9.1 untuk alasan pencabutannya.
+        $dokumenDefault = in_array($templateStruk['dokumen_default'] ?? null, ['struk', 'invoice'], true)
             ? $templateStruk['dokumen_default']
             : 'struk';
 
@@ -381,7 +384,11 @@ class KasirController extends Controller
 
         $waitingCount = Sale::pesanan()->count();
 
-        return view('transaksi.kasir.waiting-list', compact('orders', 'status', 'waitingCount'));
+        // Pesanan DP maupun yang sudah lunas sering dicetak ulang dalam bentuk berbeda:
+        // struk untuk pelanggan, invoice untuk arsip toko atau lampiran penagihan.
+        $pilihDokumen = (bool) (Setting::get('template_struk', [])['pilih_dokumen'] ?? false);
+
+        return view('transaksi.kasir.waiting-list', compact('orders', 'status', 'waitingCount', 'pilihDokumen'));
     }
 
     public function payWaiting(Request $request, Sale $sale)
