@@ -796,12 +796,12 @@ class GenerateMasifDbCommand extends Command
         $rakB = Rack::create(['name' => 'Rak B (Minuman & Snack)', 'description' => 'Lorong Tengah', 'rows' => 4, 'cols' => 6]);
         $rakC = Rack::create(['name' => 'Rak C (Kebersihan & Diri)', 'description' => 'Lorong Kanan', 'rows' => 4, 'cols' => 6]);
 
-        RackSlot::create(['rack_id' => $rakA->id, 'product_id' => $pIndomie->id, 'row' => 0, 'col' => 0, 'facings' => 4]);
-        RackSlot::create(['rack_id' => $rakA->id, 'product_id' => $pBimoli->id, 'row' => 1, 'col' => 0, 'facings' => 2]);
-        RackSlot::create(['rack_id' => $rakA->id, 'product_id' => $pBeras->id, 'row' => 2, 'col' => 0, 'facings' => 1]);
-        RackSlot::create(['rack_id' => $rakB->id, 'product_id' => $pTehPucuk->id, 'row' => 0, 'col' => 0, 'facings' => 6]);
-        RackSlot::create(['rack_id' => $rakB->id, 'product_id' => $pChitato->id, 'row' => 1, 'col' => 1, 'facings' => 3]);
-        RackSlot::create(['rack_id' => $rakC->id, 'product_id' => $pRinso->id, 'row' => 0, 'col' => 0, 'facings' => 2]);
+        RackSlot::create(['rack_id' => $rakA->id, 'product_id' => $pIndomie->id, 'row' => 0, 'col' => 0]);
+        RackSlot::create(['rack_id' => $rakA->id, 'product_id' => $pBimoli->id, 'row' => 1, 'col' => 0]);
+        RackSlot::create(['rack_id' => $rakA->id, 'product_id' => $pBeras->id, 'row' => 2, 'col' => 0]);
+        RackSlot::create(['rack_id' => $rakB->id, 'product_id' => $pTehPucuk->id, 'row' => 0, 'col' => 0]);
+        RackSlot::create(['rack_id' => $rakB->id, 'product_id' => $pChitato->id, 'row' => 1, 'col' => 1]);
+        RackSlot::create(['rack_id' => $rakC->id, 'product_id' => $pRinso->id, 'row' => 0, 'col' => 0]);
 
         // 8. Pengaturan Toko & Pembukuan
         Setting::set('store_profile', [

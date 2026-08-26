@@ -110,7 +110,6 @@ class ProductController extends Controller
             'row' => (int) $row,
             'col' => (int) $col,
             'product_id' => $product->id,
-            'facings' => max((int) $request->input('facings', 1), 1),
         ]);
 
         app(\App\Support\ProductCatalog::class)->flush();

@@ -10,12 +10,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class RackSlot extends Model
 {
-    protected $fillable = ['rack_id', 'row', 'col', 'product_id', 'facings'];
+    protected $fillable = ['rack_id', 'row', 'col', 'product_id'];
 
     protected $casts = [
         'row' => 'integer',
         'col' => 'integer',
-        'facings' => 'integer',
     ];
 
     public function rack(): BelongsTo

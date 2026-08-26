@@ -39,8 +39,9 @@
         </div>
 
         <p class="text-xs text-slate-500">
-            <strong>Jumlah muka (facing)</strong> = berapa baris produk yang menghadap ke depan di
-            kotak itu. Barang laris diberi muka lebih banyak supaya tidak cepat terlihat kosong.
+            Yang dicatat di sini hanya <strong>letaknya</strong> &mdash; barang ini ada di rak mana,
+            baris dan kolom berapa. Jumlahnya tidak perlu diisi: kalau rak terlihat kosong, stoknya
+            diambil dari gudang, dan jumlah yang sebenarnya sudah dijaga Master Produk.
         </p>
     </div>
 </details>

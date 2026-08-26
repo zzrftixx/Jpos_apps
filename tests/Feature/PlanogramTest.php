@@ -21,13 +21,12 @@ class PlanogramTest extends JposTestCase
         return Rack::create(['name' => 'Rak A', 'rows' => $rows, 'cols' => $cols]);
     }
 
-    private function taruh(Rack $rak, int $row, int $col, int $productId, int $facings = 1)
+    private function taruh(Rack $rak, int $row, int $col, int $productId)
     {
         return $this->actingAs($this->admin)->post("/master/planogram/{$rak->id}/slot", [
             'row' => $row,
             'col' => $col,
             'product_id' => $productId,
-            'facings' => $facings,
         ]);
     }
 
@@ -36,13 +35,12 @@ class PlanogramTest extends JposTestCase
         $rak = $this->buatRak();
         $produk = $this->makeProduct(['name' => 'Kopi Sachet']);
 
-        $this->taruh($rak, 1, 2, $produk->id, 3)->assertSessionHasNoErrors();
+        $this->taruh($rak, 1, 2, $produk->id)->assertSessionHasNoErrors();
 
         $slot = RackSlot::firstOrFail();
 
         $this->assertSame(1, $slot->row);
         $this->assertSame(2, $slot->col);
-        $this->assertSame(3, $slot->facings);
         // Baris & kolom ditampilkan mulai 1 - yang membaca ini orang yang berdiri di depan rak.
         $this->assertSame('Rak A 2-3', $slot->label());
     }

@@ -166,7 +166,11 @@
             </div>
         </header>
 
-        <main class="flex-1 overflow-y-auto p-4 lg:p-6">
+        {{-- Kelas tambahan per halaman. Kosong untuk hampir semua halaman - hanya Modul
+             Kasir yang mengisinya, supaya isinya bisa memakai TINGGI SISA alih-alih tinggi
+             penuh. Tanpa ini, satu spanduk peringatan di atas mendorong panel keranjang ke
+             bawah lipatan layar, dan tombol Bayar ikut terdorong bersamanya. --}}
+        <main class="flex-1 overflow-y-auto p-4 lg:p-6 @yield('kelas-main')">
             @if(session('pemulihan_login'))
                 <div class="mb-4 bg-red-50 border border-red-200 text-red-800 text-sm px-4 py-3 rounded-lg flex items-start justify-between gap-4">
                     <div>

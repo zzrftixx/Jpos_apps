@@ -45,8 +45,37 @@ class LokasiRakDiFormProdukTest extends JposTestCase
             'is_active' => 1,
             'rack_id' => $this->rak->id,
             'rack_slot' => '0-1',
-            'facings' => 3,
         ], $ubah));
+    }
+
+    /**
+     * "Jumlah muka" dicabut dari layar - di form produk MAUPUN di halaman Planogram.
+     *
+     * Yang dibutuhkan pemilik toko cuma satu: barang ini ada di rak mana, bagian mana.
+     * Berapa banyak yang menghadap ke depan tidak menjawab pertanyaan siapa pun - kalau
+     * raknya terlihat kosong, stoknya diambil dari gudang, dan jumlah yang sebenarnya
+     * sudah dijaga Master Produk. Satu kolom isian yang tidak dipakai tetap menagih
+     * perhatian setiap kali barang baru dimasukkan.
+     *
+     * Kolomnya masih berdiri di database dan itu disengaja: menghapus kolom di SQLite
+     * berpotensi membangun ulang tabel di database toko yang sedang beroperasi.
+     */
+    public function test_jumlah_muka_tidak_ada_lagi_di_form_produk_maupun_planogram(): void
+    {
+        $form = $this->actingAs($this->admin)->get('/master/produk')->assertOk()->getContent();
+
+        $this->assertStringNotContainsString('name="facings"', $form, 'Jumlah muka kembali di form produk.');
+        $this->assertStringNotContainsString('Jumlah Muka', $form);
+
+        // Yang dicabut hanya jumlahnya - letaknya tetap bisa diisi dari sini.
+        $this->assertStringContainsString('name="rack_id"', $form);
+        $this->assertStringContainsString('name="rack_slot"', $form);
+
+        $peta = $this->actingAs($this->admin)
+            ->get(route('planogram.edit', $this->rak))->assertOk()->getContent();
+
+        $this->assertStringNotContainsString('name="facings"', $peta, 'Jumlah muka kembali di halaman Planogram.');
+        $this->assertStringNotContainsString('Jumlah Muka', $peta);
     }
 
     /* ------------------------------------------------------------ menaruh produk */
@@ -62,7 +91,6 @@ class LokasiRakDiFormProdukTest extends JposTestCase
         $this->assertSame($this->rak->id, $slot->rack_id);
         $this->assertSame(0, $slot->row);
         $this->assertSame(1, $slot->col);
-        $this->assertSame(3, $slot->facings);
         $this->assertSame('Rak A 1-2', $slot->label());
     }
 
@@ -93,7 +121,7 @@ class LokasiRakDiFormProdukTest extends JposTestCase
         $this->actingAs($this->admin)->put("/master/produk/{$produk->id}", [
             'name' => 'Kopi Sachet', 'type' => 'barang', 'unit' => 'Pcs',
             'cost_price' => 5000, 'sell_price' => 8000, 'stock' => 10, 'min_stock' => 2, 'is_active' => 1,
-            'rack_id' => $this->rak->id, 'rack_slot' => '1-2', 'facings' => 1,
+            'rack_id' => $this->rak->id, 'rack_slot' => '1-2',
         ])->assertSessionHasNoErrors();
 
         $this->assertSame(1, RackSlot::count(), 'Produk yang sama menempati dua kotak sekaligus.');
@@ -169,7 +197,7 @@ class LokasiRakDiFormProdukTest extends JposTestCase
         $produk = Product::where('name', 'Kopi Sachet')->firstOrFail();
 
         $this->actingAs($this->admin)->post("/master/planogram/{$this->rak->id}/slot", [
-            'row' => 1, 'col' => 0, 'product_id' => $produk->id, 'facings' => 2,
+            'row' => 1, 'col' => 0, 'product_id' => $produk->id,
         ])->assertSessionHasNoErrors();
 
         $this->assertSame(1, RackSlot::count());

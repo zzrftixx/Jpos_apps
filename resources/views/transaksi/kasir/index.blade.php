@@ -1,6 +1,10 @@
 @extends('layouts.app')
 @section('title', 'Modul Kasir')
 
+{{-- Meminta <main> jadi kolom flex khusus di halaman ini, supaya isi di bawah ini bisa
+     mengambil TINGGI SISA - bukan tinggi penuh yang mengabaikan spanduk di atasnya. --}}
+@section('kelas-main', 'lg:flex lg:flex-col')
+
 @section('content')
 {{-- Pindaian didengarkan dari DOKUMEN, bukan dari kolom cari. Alat pindai barcode adalah
      papan ketik: ia menembakkan karakter ke elemen mana pun yang sedang terfokus, dan kasir
@@ -8,7 +12,7 @@
      public/vendor/jpos-pemindai.js beserta seluruh alasannya. --}}
 <div x-data="kasirApp()" x-init="init()"
      @jpos:barcode-dipindai.document="pindai($event.detail.kode)"
-     class="flex flex-col lg:flex-row gap-4 h-full">
+     class="flex flex-col lg:flex-row gap-4 lg:flex-1 lg:min-h-0">
 
     {{-- LEFT: Product grid --}}
     <div class="flex-1 min-w-0">
@@ -117,9 +121,30 @@
     </div>
 
     {{-- RIGHT: Cart --}}
-    <div class="w-full lg:w-96 shrink-0 flex flex-col card p-4">
+    {{-- Panel keranjang dibagi DUA ZONA.
+
+         Yang di atas menggulung: daftar barang beserta seluruh isian pembayaran. Yang di
+         bawah tidak pernah: Total dan tombol Bayar.
+
+         Sebelumnya daftar barang punya gulungan sendiri DI DALAM panel yang juga bisa
+         tergulung - dua gulungan bersarang. Yang terjadi berulang kali: kasir memutar roda
+         tetikus di tempat yang salah, dan yang bergerak bukan yang ia maksud. Sekarang
+         hanya ada satu gulungan, daftarnya bebas setinggi isinya, dan dua angka yang paling
+         sering dicari tidak pernah hilang dari layar. --}}
+    <div class="w-full lg:w-96 xl:w-[27rem] shrink-0 flex flex-col card p-0 lg:overflow-hidden">
+
+        {{-- Dua zona ini hanya berlaku di layar lebar. Di layar sempit panelnya menumpuk
+             di bawah daftar produk dan HALAMANNYA yang menggulung - kalau kaki tetapnya
+             dipaksakan di sana, tombol Bayar justru terpotong dan tidak bisa diklik. --}}
+        <div class="lg:flex-1 lg:min-h-0 lg:overflow-y-auto px-4 pt-4 pb-3">
         <div class="flex items-center justify-between mb-3">
-            <h3 class="font-semibold">Keranjang</h3>
+            <h3 class="font-semibold flex items-center gap-2">
+                Keranjang
+                {{-- Jumlah baris ditampilkan supaya kasir tahu ada berapa barang tanpa
+                     menggulung daftarnya sampai habis. --}}
+                <span x-show="cart.length > 0" x-cloak x-text="cart.length"
+                      class="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full bg-brand-500 text-white text-xs font-bold">0</span>
+            </h3>
             <div class="flex items-center gap-2">
                 {{-- Penanda bahwa isi keranjang aman kalau kasir perlu pindah halaman dulu --}}
                 <span x-show="cart.length > 0" x-cloak class="text-[11px] text-slate-400" title="Keranjang tersimpan otomatis, aman kalau Anda pindah halaman dulu">Tersimpan</span>
@@ -151,32 +176,56 @@
             @endforeach
         </select>
 
-        <div class="flex-1 overflow-y-auto space-y-2 min-h-[120px] max-h-[40vh]">
+        {{-- Tanpa batas tinggi dan tanpa gulungan sendiri: daftarnya tumbuh setinggi
+             isinya, dan yang menggulung adalah zona di atasnya. Tinggi minimum dipasang
+             supaya keranjang kosong tidak membuat panelnya melompat-lompat saat barang
+             pertama masuk. --}}
+        <div x-ref="daftarKeranjang" class="space-y-2 min-h-[200px]">
             {{-- Jenis satuan ikut jadi kunci: kotak qty membaca opsi desimalnya SEKALI saat
                  dipasang, jadi baris yang berubah dari satuan hitung ke satuan timbangan
                  harus benar-benar menghasilkan elemen baru, bukan elemen lama yang dipakai
                  ulang dengan aturan lama. --}}
             <template x-for="(item, idx) in cart" :key="item.product_id + '-' + item.unit_type + '-' + (item.is_weighable ? 'p' : 'b')">
-                <div class="flex items-center gap-2 border-b pb-2">
-                    <img :src="item.image_url" class="w-10 h-10 rounded object-cover bg-slate-100">
+                {{-- Baris yang baru disentuh disorot sebentar (lihat sorotBaris()). Nama
+                     produk dibiarkan sampai dua baris, bukan dipotong: dua barang yang nama
+                     depannya sama - "Indomie Goreng" dan "Indomie Goreng Jumbo" - terlihat
+                     persis sama kalau dipotong, dan yang salah baru ketahuan di struk. --}}
+                <div :data-baris="idx"
+                     class="rounded-lg border px-2.5 py-2 flex gap-2.5 transition-colors duration-300"
+                     :class="idx === barisTersorot ? 'border-brand-400 bg-brand-50 ring-1 ring-brand-200' : 'border-slate-200 bg-white'">
+                    <img :src="item.image_url" class="w-12 h-12 rounded-md object-cover bg-slate-100 shrink-0">
                     <div class="flex-1 min-w-0">
-                        <div class="text-sm font-medium truncate" x-text="item.name"></div>
-                        <div class="text-xs text-slate-400 flex items-center gap-1">
+                        <div class="flex items-start gap-1">
+                            <span class="flex-1 text-sm font-semibold leading-snug line-clamp-2" x-text="item.name"></span>
+                            <button @click="removeItem(idx)" title="Keluarkan dari keranjang"
+                                    class="shrink-0 -mt-1 -mr-1 w-6 h-6 rounded text-slate-300 hover:text-white hover:bg-red-500 text-lg leading-none">&times;</button>
+                        </div>
+                        <div class="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
                             <span x-text="'Rp ' + formatNumber(linePrice(item))"></span>
                             <span x-show="item.unit_label" class="text-amber-600" x-text="'/ ' + item.unit_label"></span>
                             <span x-show="isWholesaleActive(item)" class="text-emerald-600 font-medium">Grosir</span>
                         </div>
+                        <div class="flex items-center justify-between gap-2 mt-1.5">
+                            <div class="flex items-center gap-1">
+                                <button @click="decrQty(idx)" class="w-8 h-8 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 text-base font-semibold leading-none">&minus;</button>
+                                <input type="text" data-jpos-number :data-number-decimals="item.is_weighable ? 3 : 0" :data-number-min="item.is_weighable ? 0.001 : 1" x-number="item.qty" @change="clampQty(idx)" class="w-16 h-8 text-center text-sm font-semibold border border-slate-200 rounded-md">
+                                <button @click="incrQty(idx)" class="w-8 h-8 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 text-base font-semibold leading-none">+</button>
+                            </div>
+                            {{-- Total per baris. Sebelumnya hanya harga satuan yang tampil, jadi
+                                 "2 x Rp 12.500" harus dihitung di kepala kasir saat pelanggan
+                                 bertanya kenapa totalnya sekian. --}}
+                            <span class="shrink-0 text-sm font-bold text-slate-800 tabular-nums"
+                                  x-text="'Rp ' + formatNumber(linePrice(item) * item.qty)"></span>
+                        </div>
                     </div>
-                    <div class="flex items-center gap-1">
-                        <button @click="decrQty(idx)" class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-sm">-</button>
-                        <input type="text" data-jpos-number :data-number-decimals="item.is_weighable ? 3 : 0" :data-number-min="item.is_weighable ? 0.001 : 1" x-number="item.qty" @change="clampQty(idx)" class="w-16 text-center text-sm border rounded">
-                        <button @click="incrQty(idx)" class="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-sm">+</button>
-                    </div>
-                    <button @click="removeItem(idx)" class="text-red-400 hover:text-red-600 text-sm">&times;</button>
                 </div>
             </template>
             <template x-if="cart.length === 0">
-                <p class="text-sm text-slate-400 text-center py-6">Keranjang masih kosong.<br>Klik produk untuk menambahkan.</p>
+                <div class="text-center py-10 text-slate-400 select-none">
+                    <div class="text-4xl mb-2">&#128722;</div>
+                    <p class="text-sm font-medium">Keranjang masih kosong</p>
+                    <p class="text-xs mt-1">Klik produk di sebelah kiri, atau pindai barcodenya.</p>
+                </div>
             </template>
         </div>
 
@@ -189,7 +238,6 @@
             @if($tax['enabled'] ?? false)
             <div class="flex justify-between text-slate-500"><span>{{ $tax['name'] ?? 'Pajak' }} ({{ $tax['percent'] ?? 0 }}%)</span><span x-text="'Rp ' + formatNumber(taxAmount())"></span></div>
             @endif
-            <div class="flex justify-between font-semibold text-base pt-1"><span>Total</span><span x-text="'Rp ' + formatNumber(total())"></span></div>
         </div>
 
         <div class="border-t mt-3 pt-3 space-y-2">
@@ -261,6 +309,19 @@
                     <span>Sisa yang harus dilunasi</span><span x-text="'Rp ' + formatNumber(Math.max(total() - (paidAmount||0), 0))"></span>
                 </div>
             </template>
+        </div>
+        </div>{{-- akhir zona gulung --}}
+
+        {{-- KAKI TETAP.
+
+             Total dan tombol Bayar adalah dua hal yang paling sering dicari kasir, dan dua
+             hal yang paling mahal kalau harus dicari dulu sambil pelanggan menunggu di
+             depan meja. Keduanya sengaja dikeluarkan dari zona yang menggulung. --}}
+        <div class="shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-4 space-y-2">
+            <div class="flex items-baseline justify-between">
+                <span class="text-sm font-medium text-slate-500">Total</span>
+                <span class="text-xl font-bold text-slate-900 tabular-nums" x-text="'Rp ' + formatNumber(total())">Rp 0</span>
+            </div>
 
             {{-- Jalur TERTAHAN, terpisah dari Pesanan/DP di atas. Bedanya bukan mesinnya -
                  keduanya sama-sama menahan keranjang beserta stoknya - melainkan niatnya:
@@ -323,6 +384,9 @@ function kasirApp() {
         scanTimer: null,
         categoryId: '',
         cart: [],
+        // Baris keranjang yang baru saja disentuh - lihat sorotBaris() untuk alasannya.
+        barisTersorot: -1,
+        sorotTimer: null,
         customerId: '',
         discount: 0,
         paymentMethod: 'cash',
@@ -602,6 +666,7 @@ function kasirApp() {
                 const sebelum = this.cart[existingIdx].qty;
                 this.incrQty(existingIdx);
                 if (this.cart[existingIdx].qty === sebelum) this.errorMsg = `Stok ${p.name} tidak cukup.`;
+                this.sorotBaris(existingIdx);
             } else {
                 if (p.type !== 'jasa') {
                     const remaining = Math.max(p.stock - this.usedBaseUnits(p.id), 0);
@@ -621,6 +686,7 @@ function kasirApp() {
                     qty: 1,
                     price: price, wholesale_price: wholesalePrice, wholesale_min_qty: wholesaleMinQty,
                 });
+                this.sorotBaris(this.cart.length - 1);
             }
             this.focusSearch();
         },
@@ -662,7 +728,25 @@ function kasirApp() {
             if (qty > max) qty = max;
             item.qty = qty;
         },
-        removeItem(idx) { this.cart.splice(idx, 1); },
+        removeItem(idx) { this.cart.splice(idx, 1); this.barisTersorot = -1; },
+
+        /* Menyorot baris yang baru disentuh, lalu menggulung daftar ke baris itu.
+
+           Begitu keranjang lebih panjang dari layar, barang hasil pindaian bisa mendarat di
+           luar pandangan. Yang terjadi kemudian selalu sama: kasir tidak melihat apa pun
+           berubah, menyangka pindaiannya gagal, lalu memindai lagi - dan barangnya masuk dua
+           kali. Yang menahan itu bukan pesan di pojok layar, melainkan barisnya sendiri yang
+           bergerak ke tengah pandangan dan menyala sebentar. */
+        sorotBaris(idx) {
+            this.barisTersorot = idx;
+            clearTimeout(this.sorotTimer);
+            this.sorotTimer = setTimeout(() => { this.barisTersorot = -1; }, 1600);
+            this.$nextTick(() => {
+                const wadah = this.$refs.daftarKeranjang;
+                const baris = wadah && wadah.querySelector('[data-baris="' + idx + '"]');
+                if (baris) baris.scrollIntoView({ block: 'nearest' });
+            });
+        },
 
         subtotal() { return this.cart.reduce((s, i) => s + this.linePrice(i) * i.qty, 0); },
         taxAmount() { return Math.round((this.subtotal() - this.discount) * this.taxPercent / 100); },

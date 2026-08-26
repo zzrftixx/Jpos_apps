@@ -23,7 +23,7 @@
      tidak ditanam ke dalam x-data - atribut x-data dibatasi tanda kutip ganda, jadi JSON
      apa pun di dalamnya akan memotong atributnya di tengah jalan dan mematikan seluruh
      komponen. Itu pernah terjadi dan sekarang dijaga tests/js/alpine-xdata.test.cjs. --}}
-<div class="card p-6" x-data="{ baris: null, kolom: null, terbuka: false, bukaKotak(r, k, produk, muka) { this.baris = r; this.kolom = k; this.terbuka = true; this.$refs.produk.value = produk || ''; this.$refs.muka.value = muka || 1; } }">
+<div class="card p-6" x-data="{ baris: null, kolom: null, terbuka: false, bukaKotak(r, k, produk) { this.baris = r; this.kolom = k; this.terbuka = true; this.$refs.produk.value = produk || ''; } }">
 
     <div class="overflow-x-auto pb-2">
         <div class="inline-block min-w-full">
@@ -53,13 +53,10 @@
                         @endphp
                         <button type="button"
                                 class="w-32 h-24 shrink-0 border rounded-lg p-2 text-left text-xs transition {{ $warna }}"
-                                @click="bukaKotak({{ $r }}, {{ $k }}, {{ $isiKotak?->id ?: 'null' }}, {{ $slot?->facings ?: 1 }})">
+                                @click="bukaKotak({{ $r }}, {{ $k }}, {{ $isiKotak?->id ?: 'null' }})">
                             @if($isiKotak)
                                 <span class="block font-semibold leading-tight line-clamp-2">{{ $isiKotak->name }}</span>
                                 <span class="block mt-1 opacity-75">{{ \App\Support\Angka::qty($isiKotak->stock) }} {{ $isiKotak->unit }}</span>
-                                @if($slot->facings > 1)
-                                    <span class="block opacity-60">{{ $slot->facings }} muka</span>
-                                @endif
                             @else
                                 <span class="block text-center mt-6">K{{ $k + 1 }}</span>
                             @endif
@@ -89,7 +86,7 @@
             Isi kotak baris <span x-text="baris + 1">1</span>, kolom <span x-text="kolom + 1">1</span>
         </p>
 
-        <div class="grid gap-3 md:grid-cols-4">
+        <div class="grid gap-3 md:grid-cols-3">
             <div class="md:col-span-2">
                 <label class="form-label">Produk</label>
                 <select name="product_id" x-ref="produk" class="form-input">
@@ -98,10 +95,6 @@
                         <option value="{{ $p->id }}">{{ $p->name }}{{ $p->sku ? ' (' . $p->sku . ')' : '' }}</option>
                     @endforeach
                 </select>
-            </div>
-            <div>
-                <label class="form-label">Jumlah Muka</label>
-                <input type="number" name="facings" x-ref="muka" class="form-input" value="1" min="1" max="99">
             </div>
             <div class="flex items-end gap-2">
                 <button class="btn btn-primary">Simpan</button>

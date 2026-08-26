@@ -7,7 +7,7 @@
     unitsList: {{ Illuminate\Support\Js::from($units->pluck('name')) }},
     unitsById: {{ Illuminate\Support\Js::from($units->pluck('name', 'id')) }},
     daftarRak: {{ Illuminate\Support\Js::from($rakTersedia) }},
-    rakDipilih: '', kotakDipilih: '', mukaDipilih: 1,
+    rakDipilih: '', kotakDipilih: '',
     multiUnitEnabled: false,
     hppCalcEnabled: false,
     baseSellPrice: 0,
@@ -32,7 +32,7 @@
 
     /* Menyetel dropdown rak mengikuti penempatan produk yang sedang diedit. */
     setelLokasiRak(item) {
-        this.rakDipilih = ''; this.kotakDipilih = ''; this.mukaDipilih = 1;
+        this.rakDipilih = ''; this.kotakDipilih = '';
         if (!item) return;
         for (const rak of this.daftarRak) {
             const kotak = rak.kotak.find(k => k.product_id === item.id);
@@ -395,7 +395,7 @@
                             <span class="text-sm font-medium text-slate-700">Lokasi Rak</span>
                             <a href="{{ route('planogram.index') }}" target="_blank" class="text-xs text-brand-600 hover:underline">Atur rak</a>
                         </div>
-                        <div class="grid grid-cols-3 gap-3">
+                        <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="form-label">Rak</label>
                                 <select name="rack_id" x-model="rakDipilih" @change="kotakDipilih = ''" class="form-select">
@@ -413,10 +413,6 @@
                                         <option :value="k.row + '-' + k.col" x-text="k.label"></option>
                                     </template>
                                 </select>
-                            </div>
-                            <div>
-                                <label class="form-label">Jumlah Muka</label>
-                                <input type="number" name="facings" x-model="mukaDipilih" class="form-input" min="1" max="99">
                             </div>
                         </div>
                         <p class="text-[11px] text-slate-500 mt-2 leading-snug">
@@ -671,10 +667,10 @@
                     </label>
                     <label class="flex items-center gap-2 text-sm">
                         <input type="hidden" name="is_taxable" value="0">
-                        <input type="checkbox" name="is_taxable" value="1" x-bind:checked="!editItem || editItem.is_taxable"> Kena pajak
+                        <input type="checkbox" name="is_taxable" value="1" x-bind:checked="!!(editItem && editItem.is_taxable)"> Kena pajak
                     </label>
                 </div>
-                <p class="text-xs text-slate-400 -mt-1">Hilangkan centang "Kena pajak" untuk produk yang dibebaskan dari pajak. Berpengaruh hanya jika pajak diaktifkan di Pengaturan &rsaquo; Pajak.</p>
+                <p class="text-xs text-slate-400 -mt-1">Produk baru sengaja <strong>tidak</strong> dicentang. Centang hanya untuk produk yang memang dikenai pajak. Berpengaruh hanya jika pajak diaktifkan di Pengaturan &rsaquo; Pajak.</p>
 
                 <div>
                     <label class="form-label">Deskripsi</label>

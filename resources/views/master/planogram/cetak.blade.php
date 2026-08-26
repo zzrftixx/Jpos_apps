@@ -29,7 +29,6 @@
 
         .nama { font-weight: bold; display: block; line-height: 1.25; }
         .stok { display: block; margin-top: 3px; color: #333; }
-        .muka { display: block; color: #666; font-size: 10px; }
 
         /* Kolom kosong untuk ditulisi tangan saat menghitung fisik. Inilah alasan utama peta
            ini dicetak: menghitung sambil menulis di kertas, bukan bolak-balik ke layar. */
@@ -78,9 +77,6 @@
                             @if($produk)
                                 <span class="nama">{{ $produk->name }}</span>
                                 <span class="stok">Sistem: {{ \App\Support\Angka::qty($produk->stock) }} {{ $produk->unit }}</span>
-                                @if($slot->facings > 1)
-                                    <span class="muka">{{ $slot->facings }} muka</span>
-                                @endif
                                 <span class="hitung">Fisik: ______</span>
                             @else
                                 <span class="kosong">&mdash;</span>

@@ -72,7 +72,7 @@ class KecepatanHalamanTest extends JposTestCase
             if ($i % 2 === 0 && $baris < 8) {
                 RackSlot::create([
                     'rack_id' => $rak->id, 'row' => $baris, 'col' => $kolom,
-                    'product_id' => $produk->id, 'facings' => 1,
+                    'product_id' => $produk->id,
                 ]);
 
                 if (++$kolom >= 10) {

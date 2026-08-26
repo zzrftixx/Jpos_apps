@@ -104,7 +104,6 @@ class RackController extends Controller
             'row' => ['required', 'integer', 'min:0', 'max:' . ($rack->rows - 1)],
             'col' => ['required', 'integer', 'min:0', 'max:' . ($rack->cols - 1)],
             'product_id' => ['nullable', 'exists:products,id'],
-            'facings' => ['nullable', 'integer', 'min:1', 'max:99'],
         ]);
 
         DB::transaction(function () use ($data, $rack) {
@@ -124,7 +123,7 @@ class RackController extends Controller
 
             RackSlot::updateOrCreate(
                 ['rack_id' => $rack->id, 'row' => $data['row'], 'col' => $data['col']],
-                ['product_id' => $data['product_id'], 'facings' => $data['facings'] ?? 1]
+                ['product_id' => $data['product_id']]
             );
         });
 

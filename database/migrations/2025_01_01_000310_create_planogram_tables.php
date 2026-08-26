@@ -34,7 +34,14 @@ return new class extends Migration
             $table->unsignedSmallInteger('col');
             // Produk dihapus -> slotnya ikut hilang, bukan menyisakan kotak berisi produk hantu.
             $table->foreignId('product_id')->constrained('products')->cascadeOnDelete();
-            // Jumlah muka: berapa baris produk yang menghadap ke depan di kotak itu.
+            // TIDAK DIPAKAI LAGI. Dulu menyimpan "jumlah muka": berapa baris produk yang
+            // menghadap ke depan di kotak itu. Dicabut karena pemilik toko hanya perlu tahu
+            // barang ada di rak mana - kalau rak habis, stoknya diambil dari gudang.
+            //
+            // Kolomnya dibiarkan berdiri, tidak dihapus: menghapus kolom di SQLite berpotensi
+            // membangun ulang tabel, dan tabel yang dibangun ulang di database toko yang sedang
+            // beroperasi adalah risiko terbesar yang pernah dihindari proyek ini. Nilai
+            // bawaannya 1, jadi baris baru tetap sah tanpa ada yang mengisinya.
             $table->unsignedSmallInteger('facings')->default(1);
             $table->timestamps();
 
