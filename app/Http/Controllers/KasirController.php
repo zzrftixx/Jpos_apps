@@ -43,9 +43,20 @@ class KasirController extends Controller
         $keranjangDiambil = session('kasir_keranjang_diambil');
         $jumlahTertahan = Sale::tertahan()->count();
 
+        // Pilihan dokumen cetak (Struk / Invoice / Keduanya). Dibaca di sini, bukan di
+        // dalam Blade, supaya halaman kasir tidak menambah query saat sedang melayani.
+        $templateStruk = Setting::get('template_struk', []);
+        $pilihDokumen = (bool) ($templateStruk['pilih_dokumen'] ?? false);
+        // Disaring, bukan dipakai apa adanya: nilainya berakhir di dalam <script> halaman
+        // kasir, dan baris pengaturan yang pernah disunting tangan tidak boleh bisa
+        // menuliskan apa pun ke sana.
+        $dokumenDefault = in_array($templateStruk['dokumen_default'] ?? null, ['struk', 'invoice', 'keduanya'], true)
+            ? $templateStruk['dokumen_default']
+            : 'struk';
+
         return view('transaksi.kasir.index', compact(
             'categories', 'customers', 'tax', 'productsForCart', 'defaultView', 'allowToggle',
-            'keranjangDiambil', 'jumlahTertahan'
+            'keranjangDiambil', 'jumlahTertahan', 'pilihDokumen', 'dokumenDefault'
         ));
     }
 
@@ -720,7 +731,18 @@ class KasirController extends Controller
         return response()->json(['success' => true, 'redirect_url' => route('kasir.waiting-list')]);
     }
 
-    public function receipt(Sale $sale)
+    /**
+     * Halaman struk / invoice satu transaksi.
+     *
+     * Bentuknya bisa ditentukan lewat `?dokumen=struk` atau `?dokumen=invoice`. Tanpa
+     * parameter itu, yang dipakai adalah layout yang tersimpan di Pengaturan - jadi setiap
+     * tautan struk yang sudah ada di aplikasi ini berperilaku persis seperti sebelumnya.
+     *
+     * Parameternya sengaja ditaruh di URL, bukan di sesi: satu transaksi bisa perlu dicetak
+     * dua kali dalam bentuk berbeda (struk untuk pelanggan, invoice untuk arsip toko), dan
+     * dua jendela yang terbuka bersamaan tidak boleh saling menimpa pilihan yang lain.
+     */
+    public function receipt(Request $request, Sale $sale)
     {
         $sale->load(['items', 'customer', 'cashier']);
         $storeProfile = Setting::get('store_profile', []);
@@ -729,7 +751,7 @@ class KasirController extends Controller
 
         // Lebar yang benar-benar bisa dicetak - bukan lebar kertas. Lihat App\Support\Struk.
         $lebarCetak = \App\Support\Struk::lebarCetak($printerStruk);
-        $layout = $templateStruk['layout'] ?? 'simple';
+        $layout = $this->layoutDokumen($templateStruk, $request->query('dokumen'));
 
         // Tata letak dan ukuran fontnya diputuskan DI SINI, bukan di tengah Blade: blok
         // <style> struk dibangun dari nilai-nilai ini, jadi kalau ditentukan belakangan,
@@ -760,5 +782,30 @@ class KasirController extends Controller
                 'lebarCetak', 'lebarIsi', 'layout', 'fontNota', 'karakterAngka', 'notaTerlaluSempit'
             ))
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    }
+
+    /**
+     * Bentuk dokumen mana yang dipakai: yang tersimpan di Pengaturan, atau yang diminta URL.
+     *
+     * Satu kasus perlu penjelasan. Toko boleh memilih "Invoice (Dot Matrix)" sebagai bentuk
+     * struknya - itu sah dan sudah berjalan sejak 2.1.0. Tapi begitu pilihan dokumen
+     * dinyalakan, tombol "Struk" dan "Invoice" di meja kasir akan mencetak berkas yang sama
+     * persis, dan kasir tidak punya cara menebak kenapa. Karena itu permintaan `struk` yang
+     * jatuh ke layout invoice dialihkan ke "Tabel (Nota)" - bentuk termal paling lengkap,
+     * yang isinya paling mendekati invoice tanpa memakai kertas continuous form.
+     */
+    private function layoutDokumen(array $templateStruk, ?string $dokumen): string
+    {
+        $tersimpan = $templateStruk['layout'] ?? 'simple';
+
+        if ($dokumen === 'invoice') {
+            return 'invoice';
+        }
+
+        if ($dokumen === 'struk') {
+            return $tersimpan === 'invoice' ? 'tabel' : $tersimpan;
+        }
+
+        return $tersimpan;
     }
 }

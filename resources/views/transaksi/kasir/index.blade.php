@@ -323,6 +323,36 @@
                 <span class="text-xl font-bold text-slate-900 tabular-nums" x-text="'Rp ' + formatNumber(total())">Rp 0</span>
             </div>
 
+            @if($pilihDokumen)
+            {{-- PILIHAN BENTUK DOKUMEN, tepat di atas tombol yang mencetaknya.
+
+                 Ditaruh di sini dan bukan di layar terpisah karena keputusannya baru diambil
+                 saat pelanggan sudah di depan meja: yang belanja tiga barang cukup struk,
+                 yang belanja sekeranjang minta rinciannya. Menaruhnya di Pengaturan berarti
+                 kasir harus keluar dari transaksi untuk mengubahnya.
+
+                 Muncul hanya kalau dinyalakan di Pengaturan > Template Struk. Kalau mati,
+                 tidak ada satu piksel pun yang berubah dari sebelumnya. --}}
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-xs font-medium text-slate-500">Cetak</span>
+                    <span class="text-[11px] text-slate-400" x-show="dokumenCetak === 'keduanya'" x-cloak>2 jendela terbuka</span>
+                </div>
+                <div class="flex rounded-lg border border-slate-200 overflow-hidden text-xs">
+                    <template x-for="pilihan in [
+                        { nilai: 'struk',    label: 'Struk' },
+                        { nilai: 'invoice',  label: 'Invoice' },
+                        { nilai: 'keduanya', label: 'Keduanya' }
+                    ]" :key="pilihan.nilai">
+                        <button type="button" @click="dokumenCetak = pilihan.nilai"
+                                class="flex-1 py-1.5 font-medium transition-colors border-l first:border-l-0 border-slate-200"
+                                :class="dokumenCetak === pilihan.nilai ? 'bg-brand-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'"
+                                x-text="pilihan.label"></button>
+                    </template>
+                </div>
+            </div>
+            @endif
+
             {{-- Jalur TERTAHAN, terpisah dari Pesanan/DP di atas. Bedanya bukan mesinnya -
                  keduanya sama-sama menahan keranjang beserta stoknya - melainkan niatnya:
                  ini untuk pelanggan yang masih berdiri di depan kasir dan mau ambil barang
@@ -342,6 +372,22 @@
                 <span x-show="processing">Memproses...</span>
             </button>
             <p class="text-xs text-red-500" x-text="errorMsg"></p>
+
+            {{-- Jendela yang diblokir peramban. Transaksinya sudah tersimpan - yang gagal
+                 hanya membuka halaman cetaknya, dan itu tidak boleh berakhir sebagai
+                 kebingungan diam di meja kasir. --}}
+            <template x-if="dokumenTertahan.length > 0">
+                <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 space-y-1">
+                    <p class="font-medium">Transaksi tersimpan, tapi jendela cetak diblokir peramban.</p>
+                    <template x-for="d in dokumenTertahan" :key="d.bentuk">
+                        <a :href="d.alamat" target="_blank"
+                           class="block underline font-medium"
+                           x-text="'Buka ' + (d.bentuk === 'invoice' ? 'Invoice' : 'Struk') + ' &rarr;'"></a>
+                    </template>
+                    <button type="button" @click="dokumenTertahan = []; window.location.reload()"
+                            class="text-amber-600 hover:text-amber-800 underline">Selesai, lanjut transaksi berikutnya</button>
+                </div>
+            </template>
         </div>
     </div>
 
@@ -387,6 +433,10 @@ function kasirApp() {
         // Baris keranjang yang baru saja disentuh - lihat sorotBaris() untuk alasannya.
         barisTersorot: -1,
         sorotTimer: null,
+        // Bentuk dokumen yang akan dicetak sesudah bayar. Nilai awalnya dari Pengaturan.
+        dokumenCetak: @json($dokumenDefault ?? 'struk'),
+        // Dokumen yang jendelanya diblokir peramban - ditawarkan sebagai tautan, lihat bukaDokumen().
+        dokumenTertahan: [],
         customerId: '',
         discount: 0,
         paymentMethod: 'cash',
@@ -730,6 +780,37 @@ function kasirApp() {
         },
         removeItem(idx) { this.cart.splice(idx, 1); this.barisTersorot = -1; },
 
+        /* Membuka dokumen yang dipilih sesudah pembayaran berhasil.
+
+           Kalau pilihan dokumen MATI, alamatnya dipakai apa adanya - tanpa parameter apa pun -
+           supaya perilakunya sama persis dengan sebelum fitur ini ada.
+
+           "Keduanya" membuka dua jendela, dan itu tidak bisa dihindari: struk termal dan
+           invoice dot matrix memakai ukuran @page yang berbeda, dan satu halaman tidak bisa
+           punya dua ukuran kertas dalam satu perintah cetak.
+
+           Jendela kedua kadang diblokir peramban - permintaannya datang sesudah menunggu
+           jawaban server, jadi tidak lagi dianggap akibat langsung dari klik. Yang diblokir
+           TIDAK didiamkan: alamatnya ditawarkan sebagai tautan, dan halaman sengaja tidak
+           dimuat ulang supaya tautan itu tidak ikut hilang bersamanya. */
+        bukaDokumen(alamatStruk) {
+            @if($pilihDokumen)
+                const bentuk = this.dokumenCetak === 'keduanya' ? ['struk', 'invoice'] : [this.dokumenCetak];
+                const tertahan = [];
+
+                bentuk.forEach(b => {
+                    const alamat = alamatStruk + '?dokumen=' + b;
+                    if (!window.open(alamat, '_blank')) tertahan.push({ bentuk: b, alamat: alamat });
+                });
+
+                this.dokumenTertahan = tertahan;
+                return tertahan.length === 0;
+            @else
+                window.open(alamatStruk, '_blank');
+                return true;
+            @endif
+        },
+
         /* Menyorot baris yang baru disentuh, lalu menggulung daftar ke baris itu.
 
            Begitu keranjang lebih panjang dari layar, barang hasil pindaian bisa mendarat di
@@ -1008,7 +1089,8 @@ function kasirApp() {
                     this.processing = false;
                     return;
                 }
-                window.open(data.receipt_url, '_blank');
+                const semuaTerbuka = this.bukaDokumen(data.receipt_url);
+
                 // Draf dibuang lebih dulu, sebelum halaman dimuat ulang - kalau tidak,
                 // transaksi yang baru saja dibayar akan muncul lagi sebagai keranjang.
                 this.hapusDraf();
@@ -1018,7 +1100,11 @@ function kasirApp() {
                 this.customerId = '';
                 this.isWaitingList = false;
                 this.dueDate = '';
-                window.location.reload();
+
+                // Transaksinya SUDAH tersimpan di server. Kalau ada jendela yang diblokir,
+                // halaman ditahan supaya tautannya bisa diklik; memuat ulang di sini akan
+                // menghapus satu-satunya jalan kasir mencetak dokumen yang tertinggal.
+                if (semuaTerbuka) window.location.reload();
             } catch (e) {
                 this.errorMsg = 'Gagal menghubungi server.';
             }

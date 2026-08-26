@@ -11,6 +11,8 @@
     showCustomer: {{ ($settings['show_customer'] ?? true) ? 'true' : 'false' }},
     headerNote: @js($settings['header_note'] ?? ''),
     footerNote: @js($settings['footer_note'] ?? 'Terima kasih telah berbelanja!'),
+    pilihDokumen: {{ ($settings['pilih_dokumen'] ?? false) ? 'true' : 'false' }},
+    dokumenDefault: @js($settings['dokumen_default'] ?? 'struk'),
 }">
     <div class="card p-6">
         <h3 class="font-semibold mb-4">Desain Struk</h3>
@@ -59,6 +61,58 @@
                 <label class="form-label">Catatan Footer</label>
                 <input type="text" name="footer_note" x-model="footerNote" class="form-input">
             </div>
+
+            {{-- PILIHAN DOKUMEN SAAT BAYAR.
+
+                 Ditaruh di halaman ini, bukan di Printer Struk, karena yang diputuskan di
+                 sini adalah BENTUK dokumen - sama seperti pemilih layout di atasnya. Printer
+                 Struk mengurus ukuran kertas. Bersebelahan begini, hubungan antara "layout
+                 yang dipilih" dan "yang dicetak sebagai Struk" langsung terlihat. --}}
+            <div class="border-t border-slate-200 pt-4 mt-4 space-y-3">
+                <label class="flex items-start gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" name="pilih_dokumen" value="1" x-model="pilihDokumen" class="mt-0.5">
+                    <span>
+                        <span class="font-medium">Tanya bentuk dokumen setiap kali bayar</span>
+                        <span class="block text-xs text-slate-500 mt-0.5">
+                            Kasir memilih sendiri: <strong>Struk</strong>, <strong>Invoice</strong>, atau
+                            <strong>keduanya sekaligus</strong>. Berguna kalau sebagian pelanggan cuma
+                            perlu struk, sementara yang belanja banyak minta rincian lengkap.
+                        </span>
+                    </span>
+                </label>
+
+                <div x-show="pilihDokumen" x-cloak class="pl-6 space-y-2">
+                    <label class="form-label">Pilihan yang sudah tersorot saat kasir membuka layar bayar</label>
+                    <div class="flex rounded-lg border overflow-hidden text-sm">
+                        <label class="flex-1 text-center py-2 cursor-pointer" :class="dokumenDefault === 'struk' ? 'bg-brand-500 text-white' : 'bg-white text-slate-600'">
+                            <input type="radio" name="dokumen_default" value="struk" x-model="dokumenDefault" class="hidden"> Struk
+                        </label>
+                        <label class="flex-1 text-center py-2 cursor-pointer border-l" :class="dokumenDefault === 'invoice' ? 'bg-brand-500 text-white' : 'bg-white text-slate-600'">
+                            <input type="radio" name="dokumen_default" value="invoice" x-model="dokumenDefault" class="hidden"> Invoice
+                        </label>
+                        <label class="flex-1 text-center py-2 cursor-pointer border-l" :class="dokumenDefault === 'keduanya' ? 'bg-brand-500 text-white' : 'bg-white text-slate-600'">
+                            <input type="radio" name="dokumen_default" value="keduanya" x-model="dokumenDefault" class="hidden"> Keduanya
+                        </label>
+                    </div>
+
+                    <p class="text-xs text-slate-500">
+                        <strong>Struk</strong> memakai layout yang dipilih di atas dan mengikuti ukuran
+                        kertas di Printer Struk. <strong>Invoice</strong> selalu memakai bentuk Dot Matrix
+                        22 x 16 cm dengan kop toko, tabel bergaris, dan kolom tanda tangan.
+                    </p>
+
+                    {{-- Peringatan yang hanya muncul kalau memang perlu: kalau layoutnya sendiri
+                         sudah Invoice, tombol "Struk" dan "Invoice" akan mencetak hal yang sama. --}}
+                    <p x-show="layout === 'invoice'" x-cloak
+                       class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        Layout di atas sedang disetel <strong>Invoice (Dot Matrix)</strong>. Supaya tombol
+                        <strong>Struk</strong> tidak mencetak berkas yang sama persis, ia akan memakai
+                        <strong>Tabel (Nota)</strong>. Pilih layout selain Invoice di atas kalau Anda ingin
+                        bentuk struknya yang lain.
+                    </p>
+                </div>
+            </div>
+
             <button class="btn btn-primary">Simpan Template</button>
         </form>
         <p class="text-xs text-slate-400 mt-3" x-show="layout !== 'invoice'">Lebar cetak &amp; font diatur di menu Printer Struk (saat ini: {{ $printerStruk['print_width'] }}mm cetak dari kertas {{ $printerStruk['paper_size'] ?? 80 }}mm).</p>

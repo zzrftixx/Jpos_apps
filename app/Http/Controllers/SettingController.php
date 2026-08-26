@@ -230,7 +230,14 @@ class SettingController extends Controller
             'layout' => ['required', 'in:simple,normal,tabel,invoice'],
             'header_note' => ['nullable', 'string'],
             'footer_note' => ['nullable', 'string'],
+            'dokumen_default' => ['nullable', 'in:struk,invoice,keduanya'],
         ]);
+
+        // Pilihan dokumen saat bayar. Mati secara bawaan: toko yang sudah berjalan tidak
+        // boleh tiba-tiba melihat pilihan baru di meja kasir tanpa memintanya.
+        $data['pilih_dokumen'] = $request->boolean('pilih_dokumen');
+        $data['dokumen_default'] = $data['dokumen_default'] ?? 'struk';
+
         $data['show_logo'] = $request->boolean('show_logo');
         $data['show_address'] = $request->boolean('show_address');
         $data['show_phone'] = $request->boolean('show_phone');
