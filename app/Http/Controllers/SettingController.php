@@ -489,6 +489,10 @@ class SettingController extends Controller
             'mode' => ['required', 'in:sederhana,lengkap'],
         ]);
 
+        // Mati secara bawaan. Toko sembako tidak pernah butuh grosir untuk jasa, dan dua kolom
+        // yang tidak pernah diisi tetap menagih perhatian setiap kali produk baru dimasukkan.
+        $data['grosir_jasa'] = $request->boolean('grosir_jasa');
+
         Setting::set('produk_mode', $data);
 
         return back()->with('success', 'Pengaturan mode produk disimpan.');

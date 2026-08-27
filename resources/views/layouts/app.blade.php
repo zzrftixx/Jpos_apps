@@ -16,7 +16,14 @@
 <div class="flex h-screen overflow-hidden">
     {{-- Sidebar --}}
     <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
-           class="fixed z-40 inset-y-0 left-0 w-64 bg-slate-900 text-slate-200 transform transition-transform lg:translate-x-0 lg:static lg:flex flex-col">
+           {{-- `flex flex-col` WAJIB berlaku di semua ukuran, bukan cuma lg.
+
+                Dulu tertulis `lg:flex flex-col`, jadi di layar sempit <aside> ini
+                display:block - dan `flex-1` pada <nav> di dalamnya tidak berarti apa-apa.
+                Akibatnya navnya setinggi isinya (terukur 1326px), `overflow-y-auto`
+                tidak pernah aktif, dan menu di bawah lipatan TIDAK BISA DIJANGKAU sama
+                sekali: "Tentang Aplikasi" berakhir 566px di luar layar. --}}
+           class="fixed z-40 inset-y-0 left-0 w-64 bg-slate-900 text-slate-200 transform transition-transform flex flex-col lg:translate-x-0 lg:static">
         <div class="flex items-center gap-2 px-5 h-16 border-b border-slate-800">
             @if(!empty($storeProfile['logo']))
                 <img src="{{ url('media/'.$storeProfile['logo']) }}" alt="{{ $storeProfile['name'] ?? 'Logo' }}" class="w-12 h-12 object-cover shrink-0">
@@ -170,7 +177,9 @@
              Kasir yang mengisinya, supaya isinya bisa memakai TINGGI SISA alih-alih tinggi
              penuh. Tanpa ini, satu spanduk peringatan di atas mendorong panel keranjang ke
              bawah lipatan layar, dan tombol Bayar ikut terdorong bersamanya. --}}
-        <main class="flex-1 overflow-y-auto p-4 lg:p-6 @yield('kelas-main')">
+        {{-- pb-24 di layar sempit: bilah navigasi bawah menutupi ~64px, dan tanpa
+             ruang ini tombol terakhir tiap halaman berada persis di belakangnya. --}}
+        <main class="flex-1 overflow-y-auto p-4 lg:p-6 pb-24 lg:pb-6 @yield('kelas-main')">
             @if(session('pemulihan_login'))
                 <div class="mb-4 bg-red-50 border border-red-200 text-red-800 text-sm px-4 py-3 rounded-lg flex items-start justify-between gap-4">
                     <div>
@@ -220,7 +229,71 @@
     </div>
 </div>
 
+{{-- ============================================================================
+     NAVIGASI BAWAH - hanya layar sempit.
+
+     Sidebar 27 menu itu benar untuk komputer kasir, dan salah untuk telepon: menu
+     yang paling sering dipakai terkubur di balik tombol hamburger, dan tiap
+     perpindahan halaman butuh dua ketukan plus satu gulungan.
+
+     Empat tujuan yang paling sering dituju ditarik keluar ke bawah - tempat yang
+     paling mudah dijangkau ibu jari - dan sisanya tetap lewat "Menu". Yang dipilih
+     bukan tebakan: Kasir dan Pesanan adalah dua halaman tempat uang berpindah,
+     Produk tempat barang dimasukkan, Laporan tempat hasilnya dilihat.
+
+     Ikut aturan hak akses yang sama dengan sidebar - peran yang tidak boleh membuka
+     Laporan tidak melihat tombolnya di sini juga. Tombolnya menyusut mengikuti
+     jumlah yang tersisa.
+     ============================================================================ --}}
+@php
+    $bawah = [];
+
+    if ($u && $u->can_access('kasir')) {
+        $bawah[] = ['rute' => 'kasir.index', 'aktif' => 'kasir.index', 'ikon' => 'cart', 'label' => 'Kasir'];
+        $bawah[] = ['rute' => 'kasir.waiting-list', 'aktif' => 'kasir.waiting-list*', 'ikon' => 'receipt', 'label' => 'Pesanan', 'lencana' => $waitingCount ?? 0];
+    }
+    if ($u && $u->can_access('produk')) {
+        $bawah[] = ['rute' => 'produk.index', 'aktif' => 'produk.*', 'ikon' => 'box', 'label' => 'Produk'];
+    }
+    if ($u && $u->can_access('laporan')) {
+        $bawah[] = ['rute' => 'laporan.penjualan', 'aktif' => 'laporan.*', 'ikon' => 'chart', 'label' => 'Laporan'];
+    }
+@endphp
+
+<nav class="lg:hidden fixed bottom-0 inset-x-0 z-30 flex bg-white border-t border-slate-200 pb-safe">
+    @foreach($bawah as $b)
+        @php $ini = request()->routeIs($b['aktif']); @endphp
+        <a href="{{ route($b['rute']) }}"
+           class="relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium {{ $ini ? 'text-brand-600' : 'text-slate-500' }}">
+            {{-- Garis di ATAS tombol yang sedang aktif, bukan warna latar: latar yang
+                 berubah membuat bilah ini terlihat seperti empat kotak terpisah. --}}
+            <span class="absolute top-0 inset-x-3 h-0.5 rounded-b {{ $ini ? 'bg-brand-500' : '' }}"></span>
+            <span class="relative">
+                <x-dynamic-component :component="'icon.' . $b['ikon']" />
+                @if(($b['lencana'] ?? 0) > 0)
+                    <span class="absolute -top-1.5 -right-2 bg-amber-500 text-white text-[9px] font-bold rounded-full px-1 leading-4 min-w-[16px] text-center">{{ $b['lencana'] }}</span>
+                @endif
+            </span>
+            <span>{{ $b['label'] }}</span>
+        </a>
+    @endforeach
+
+    {{-- Pintu ke sisa menu. Sidebar tetap ada seutuhnya - yang berubah cuma bahwa ia
+         tidak lagi jadi satu-satunya jalan. --}}
+    <button type="button" @click="sidebarOpen = true"
+            class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium text-slate-500">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+        </svg>
+        <span>Menu</span>
+    </button>
+</nav>
+
+
 <style>
+    /* Telepon dengan bilah geser di bawah layar menutupi ~34px terakhir. Tanpa ini,
+       label navigasi bawah berada persis di balik bilah itu dan tidak bisa disentuh. */
+    .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
     .nav-link { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:8px; color:#cbd5e1; transition:.15s; }
     .nav-link:hover { background:#1e293b; color:#fff; }
     .nav-active { background:#1c6ff0; color:#fff !important; }

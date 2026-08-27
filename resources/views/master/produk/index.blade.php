@@ -4,6 +4,7 @@
 @section('content')
 <div x-data="{
     showModal: false, editItem: null, type: 'barang', unit: 'Pcs', produkMode: '{{ $produkMode }}', imagePreview: null,
+    grosirJasa: {{ $grosirJasa ? 'true' : 'false' }},
     unitsList: {{ Illuminate\Support\Js::from($units->pluck('name')) }},
     unitsById: {{ Illuminate\Support\Js::from($units->pluck('name', 'id')) }},
     daftarRak: {{ Illuminate\Support\Js::from($rakTersedia) }},
@@ -456,7 +457,11 @@
                     </div>
                 </div>
 
-                <div x-show="type === 'barang'">
+                {{-- Grosir untuk JASA hanya muncul kalau dinyalakan di Pengaturan > Mode Produk.
+                     Datang dari toko fotokopi: harga per lembar turun begitu jumlahnya banyak
+                     (cetak skripsi, jilid borongan). Aturannya sama persis dengan grosir barang,
+                     jadi tidak ada mesin harga baru - yang ditambah cuma jalan masuknya. --}}
+                <div x-show="type === 'barang' || grosirJasa">
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="form-label">Harga Grosir (opsional)</label>
@@ -467,7 +472,10 @@
                             <input type="text" data-jpos-number data-number-empty="kosong" data-number-min="2" name="wholesale_min_qty" x-number.oneway="editItem ? editItem.wholesale_min_qty : ''" placeholder="mis. 12" class="form-input">
                         </div>
                     </div>
-                    <p class="text-xs text-slate-400 mt-1 mb-3">Kalau qty beli (satuan dasar) mencapai jumlah ini di Kasir, harga otomatis pakai harga grosir.</p>
+                    <p class="text-xs text-slate-400 mt-1 mb-3">
+                        Kalau qty beli (satuan dasar) mencapai jumlah ini di Kasir, harga otomatis pakai harga grosir.
+                        <span x-show="type === 'jasa'" x-cloak class="block mt-0.5">Contoh fotokopi: <strong>Rp 300</strong> mulai <strong>100</strong> lembar, dari harga satuan Rp 500.</span>
+                    </p>
 
                     <template x-if="produkMode === 'lengkap' || unitRows.length > 0">
                     <div class="border rounded-lg p-3 bg-slate-50 space-y-3">

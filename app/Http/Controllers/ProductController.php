@@ -47,10 +47,13 @@ class ProductController extends Controller
         $suppliers = Supplier::orderBy('name')->get();
         $units = Unit::orderBy('name')->get();
         $produkMode = Setting::produkMode();
+
+        // Fitur lanjutan: grosir untuk produk Jasa (Pengaturan > Mode Produk).
+        $grosirJasa = (bool) (Setting::get('produk_mode', [])['grosir_jasa'] ?? false);
         $rakTersedia = $this->rakBesertaKotakKosong();
 
         return view('master.produk.index', compact(
-            'products', 'categories', 'suppliers', 'summary', 'units', 'produkMode', 'rakTersedia'
+            'products', 'categories', 'suppliers', 'summary', 'units', 'produkMode', 'rakTersedia', 'grosirJasa'
         ));
     }
 
@@ -473,14 +476,25 @@ class ProductController extends Controller
         $data['multi_unit_enabled'] = $request->boolean('multi_unit_enabled', false);
         $data['hpp_calc_enabled'] = $request->boolean('hpp_calc_enabled', false);
 
-        // Produk jasa dibuat sederhana - cuma harga modal, harga jual, satuan. Field stok, harga
-        // grosir, dan satuan besar dipaksa kosong di server apapun yang terkirim dari form,
-        // walau field-nya sudah disembunyikan di UI saat tipe Jasa dipilih.
+        // Produk jasa dibuat sederhana - cuma harga modal, harga jual, satuan. Field stok dan
+        // satuan besar dipaksa kosong di server apapun yang terkirim dari form, walau field-nya
+        // sudah disembunyikan di UI saat tipe Jasa dipilih.
+        //
+        // KECUALI harga grosir, kalau pemilik toko menyalakannya di Pengaturan > Mode Produk.
+        // Sebabnya datang dari toko fotokopi: harga per lembar turun begitu jumlahnya banyak
+        // (cetak skripsi, jilid borongan), dan itu persis aturan yang sama dengan grosir barang.
+        // Mesin harganya sendiri sudah tidak peduli tipe - lihat ResolvesUnitPricing - jadi yang
+        // selama ini menahan cuma baris ini.
+        $grosirJasa = (bool) (Setting::get('produk_mode', [])['grosir_jasa'] ?? false);
+
         if ($data['type'] === 'jasa') {
             $data['stock'] = 0;
             $data['min_stock'] = 0;
-            $data['wholesale_price'] = null;
-            $data['wholesale_min_qty'] = null;
+
+            if (! $grosirJasa) {
+                $data['wholesale_price'] = null;
+                $data['wholesale_min_qty'] = null;
+            }
             $data['multi_unit_enabled'] = false;
             $data['hpp_calc_enabled'] = false;
             $data['units'] = [];
