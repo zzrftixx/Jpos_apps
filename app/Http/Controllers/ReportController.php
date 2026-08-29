@@ -8,10 +8,12 @@ use App\Models\NeracaSnapshot;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SalePayment;
 use App\Models\Setting;
 use App\Models\StockMovement;
 use App\Support\Akuntansi;
 use App\Support\Angka;
+use App\Support\MetodeBayar;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -23,10 +25,13 @@ class ReportController extends Controller
         $from = $request->from ?: now()->startOfMonth()->toDateString();
         $to = $request->to ?: now()->toDateString();
 
-        $sales = Sale::with(['customer', 'cashier'])
+        $metode = in_array($request->metode, MetodeBayar::kunci(), true) ? $request->metode : null;
+
+        $sales = Sale::with(['customer', 'cashier', 'payments'])
             ->whereDate('created_at', '>=', $from)
             ->whereDate('created_at', '<=', $to)
             ->when($request->order_status, fn($q) => $q->where('order_status', $request->order_status))
+            ->when($metode, fn($q) => $q->whereHas('payments', fn($p) => $p->where('method', $metode)))
             ->orderByDesc('created_at')
             ->paginate(20)
             ->withQueryString();
@@ -37,7 +42,36 @@ class ReportController extends Controller
             ->selectRaw('COUNT(*) as trx_count, SUM(total) as total_revenue, SUM(discount) as total_discount, SUM(tax_amount) as total_tax')
             ->first();
 
-        return view('laporan.penjualan', compact('sales', 'summary', 'from', 'to'));
+        // UANG MASUK PER METODE - dan kenapa angkanya SENGAJA tidak sama dengan
+        // "Total Pendapatan" di sebelahnya.
+        //
+        // Keduanya menjawab pertanyaan yang berbeda, dan mencoba menyamakannya justru akan
+        // membuat salah satunya bohong:
+        //
+        //   Total Pendapatan  : nilai transaksi yang SELESAI dalam periode ini, apa pun
+        //                       kapan uangnya diterima. Ini dasar omset dan laba rugi.
+        //   Uang Masuk        : uang yang BENAR-BENAR diterima dalam periode ini, apa pun
+        //                       transaksinya selesai kapan. Ini yang diadu dengan isi laci.
+        //
+        // Contoh yang membuat keduanya wajib berbeda: pesanan cetak skripsi Rp 400.000
+        // dengan DP Rp 100.000 di akhir Januari dan pelunasan Rp 300.000 di awal Februari.
+        // Januari menerima uang Rp 100.000 tapi belum punya omset; Februari punya omset
+        // Rp 400.000 tapi hanya menerima Rp 300.000. Keduanya benar.
+        //
+        // Transaksi yang dibatalkan dikeluarkan: uangnya sudah kembali ke pembeli.
+        $uangMasuk = SalePayment::query()
+            ->join('sales', 'sales.id', '=', 'sale_payments.sale_id')
+            ->whereDate('sale_payments.created_at', '>=', $from)
+            ->whereDate('sale_payments.created_at', '<=', $to)
+            ->where('sales.order_status', '<>', 'cancelled')
+            ->selectRaw('sale_payments.method, COUNT(*) as jumlah, SUM(sale_payments.amount) as nilai')
+            ->groupBy('sale_payments.method')
+            ->pluck('nilai', 'method')
+            ->all();
+
+        return view('laporan.penjualan', compact(
+            'sales', 'summary', 'from', 'to', 'metode', 'uangMasuk'
+        ));
     }
 
     public function stok(Request $request)

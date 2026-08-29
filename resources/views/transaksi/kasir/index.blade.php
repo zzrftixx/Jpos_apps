@@ -273,7 +273,7 @@
             </template>
 
             <select x-model="paymentMethod" class="form-select">
-                <option value="cash">Tunai</option>
+                <option value="tunai">Tunai</option>
                 <option value="debit">Kartu Debit</option>
                 <option value="qris">QRIS</option>
                 <option value="transfer">Transfer</option>
@@ -419,7 +419,7 @@ function kasirApp() {
         dokumenCetak: @json($dokumenDefault ?? 'struk'),
         customerId: '',
         discount: 0,
-        paymentMethod: 'cash',
+        paymentMethod: 'tunai',
         paidAmount: 0,
         isWaitingList: false,
         // 'tanpa_dp' | 'dp' - hanya menentukan nominal DP, bukan status pesanannya.
@@ -598,7 +598,7 @@ function kasirApp() {
 
             this.customerId = draf.customerId || '';
             this.discount = Number(draf.discount) || 0;
-            this.paymentMethod = draf.paymentMethod || 'cash';
+            this.paymentMethod = draf.paymentMethod || 'tunai';
             this.paidAmount = Number(draf.paidAmount) || 0;
             this.isWaitingList = !!draf.isWaitingList;
             this.dueDate = draf.dueDate || '';

@@ -181,13 +181,7 @@
         <tr><td>Pajak</td><td class="right">{{ number_format($sale->tax_amount, 0, ',', '.') }}</td></tr>
         @endif
         <tr style="font-weight:bold; border-top:1px solid #000;"><td>TOTAL</td><td class="right">Rp {{ number_format($sale->total, 0, ',', '.') }}</td></tr>
-        @if($sale->order_status === 'waiting')
-        <tr><td>DP Dibayar</td><td class="right">{{ number_format($sale->paid_amount, 0, ',', '.') }}</td></tr>
-        <tr style="font-weight:bold;"><td>SISA BAYAR</td><td class="right">{{ number_format($sale->remaining, 0, ',', '.') }}</td></tr>
-        @else
-        <tr><td>Bayar ({{ strtoupper($sale->payment_method) }})</td><td class="right">{{ number_format($sale->paid_amount, 0, ',', '.') }}</td></tr>
-        <tr><td>Kembali</td><td class="right">{{ number_format($sale->change_amount, 0, ',', '.') }}</td></tr>
-        @endif
+        @include('transaksi.kasir._baris-pembayaran')
     </table>
 
     @if($sale->order_status === 'waiting')
@@ -351,13 +345,7 @@
         <tr><td>Pajak</td><td class="right">{{ number_format($sale->tax_amount, 0, ',', '.') }}</td></tr>
         @endif
         <tr style="font-weight:bold;"><td>{{ $isNota ? 'Jumlah Rp.' : 'TOTAL' }}</td><td class="right">{{ number_format($sale->total, 0, ',', '.') }}</td></tr>
-        @if($sale->order_status === 'waiting')
-        <tr><td>DP Dibayar</td><td class="right">{{ number_format($sale->paid_amount, 0, ',', '.') }}</td></tr>
-        <tr style="font-weight:bold;"><td>SISA BAYAR</td><td class="right">{{ number_format($sale->remaining, 0, ',', '.') }}</td></tr>
-        @else
-        <tr><td>Bayar ({{ strtoupper($sale->payment_method) }})</td><td class="right">{{ number_format($sale->paid_amount, 0, ',', '.') }}</td></tr>
-        <tr><td>Kembali</td><td class="right">{{ number_format($sale->change_amount, 0, ',', '.') }}</td></tr>
-        @endif
+        @include('transaksi.kasir._baris-pembayaran')
     </table>
     <hr>
 

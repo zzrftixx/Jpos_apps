@@ -26,6 +26,47 @@
 
     </div>
 
+    {{-- PENYARING METODE PEMBAYARAN.
+
+         Ditaruh di baris SENDIRI, di bawah tombol status, bukan disambung ke deretan yang
+         sama: keduanya menjawab pertanyaan berbeda ("sudah lunas belum?" vs "uangnya masuk
+         lewat apa?"), dan digabung dalam satu baris keduanya jadi sulit dibaca - apalagi di
+         telepon, tempat satu baris berisi delapan tombol akan membungkus jadi tiga baris
+         tanpa batas yang jelas.
+
+         Angka di tiap tombol sengaja ada: tanpa itu kasir harus menekan satu per satu untuk
+         tahu mana yang berisi. Seluruh angka datang dari SATU query di controller (B1).
+
+         "Lainnya" hanya muncul kalau memang ada isinya - ia menampung ejaan lama yang tidak
+         dikenali, dan menampilkannya selalu hanya akan membingungkan toko yang datanya bersih. --}}
+    @php
+        $metodePilihan = \App\Support\MetodeBayar::pilihan();
+        $dasarFilter = ['status' => $status] + (request('q') ? ['q' => request('q')] : []);
+    @endphp
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+        <span class="text-sm text-slate-500">Metode bayar:</span>
+
+        <a href="{{ route('kasir.waiting-list', $dasarFilter) }}"
+           class="btn {{ $metode ? 'btn-outline' : 'btn-primary' }} text-sm">Semua</a>
+
+        @foreach($metodePilihan as $kunci => $labelMetode)
+            @continue($kunci === 'lainnya' && empty($jumlahMetode['lainnya']))
+            <a href="{{ route('kasir.waiting-list', $dasarFilter + ['metode' => $kunci]) }}"
+               class="btn {{ $metode === $kunci ? 'btn-primary' : 'btn-outline' }} text-sm">
+                {{ $labelMetode }}
+                <span class="text-xs {{ $metode === $kunci ? '' : 'text-slate-400' }}">{{ $jumlahMetode[$kunci] ?? 0 }}</span>
+            </a>
+        @endforeach
+    </div>
+
+    @if($metode)
+        <p class="text-xs text-slate-500 mb-4">
+            Menampilkan pesanan yang <strong>sebagian atau seluruh</strong> uangnya masuk lewat
+            {{ $metodePilihan[$metode] ?? 'metode ini' }}. Pesanan yang DP-nya lewat cara lain
+            lalu dilunasi dengan {{ $metodePilihan[$metode] ?? 'ini' }} tetap ikut tampil.
+        </p>
+    @endif
+
     {{-- Blok ini yang ditukar saat pencarian langsung; lihat
          public/vendor/jpos-live-search.js --}}
     <div data-live-results>
@@ -41,6 +82,21 @@
             </div>
             <div class="text-xs text-slate-400 mb-2">
                 {{ $o->created_at->format('d/m/Y H:i') }} &middot; {{ $o->customer->name ?? 'Pelanggan Umum' }} &middot; Kasir: {{ $o->cashier->name ?? '-' }}
+            </div>
+
+            {{-- Setiap kali uang diterima, satu lencana. Pesanan yang DP-nya tunai lalu
+                 dilunasi lewat QRIS menampilkan DUA lencana - dan itu memang keadaan
+                 sebenarnya, yang selama ini tidak pernah bisa terlihat di mana pun. --}}
+            <div class="flex flex-wrap gap-2 mb-2">
+                @forelse($o->payments as $bayar)
+                    <span class="px-2 py-0.5 rounded-full text-xs border {{ \App\Support\MetodeBayar::kelas($bayar->method) }}">
+                        {{ $bayar->label_jenis }} &middot; {{ $bayar->label_metode }} &middot; Rp {{ number_format($bayar->amount, 0, ',', '.') }}
+                    </span>
+                @empty
+                    <span class="px-2 py-0.5 rounded-full text-xs border bg-slate-100 text-slate-700 border-slate-200">
+                        Belum ada pembayaran
+                    </span>
+                @endforelse
             </div>
 
             <div class="text-sm space-y-1 border-t pt-2">
@@ -125,6 +181,18 @@
                     <div>
                         <label class="form-label">Jumlah Bayar</label>
                         <input type="text" data-jpos-number data-number-decimals="2" name="amount" x-number.oneway="payOrder.remaining" required class="form-input">
+                    </div>
+                    {{-- INI YANG SELAMA INI HILANG. Sebelum ini pelunasan hanya menambah
+                         nominal tanpa mencatat caranya sama sekali, sehingga pesanan yang
+                         DP-nya tunai lalu dilunasi lewat QRIS tercatat seluruhnya tunai -
+                         dan laci kasir malam itu kurang sebesar pelunasannya tanpa jejak. --}}
+                    <div>
+                        <label class="form-label">Dibayar Dengan</label>
+                        <select name="method" class="form-select">
+                            @foreach(\App\Support\MetodeBayar::DAFTAR as $kunci => $labelMetode)
+                                <option value="{{ $kunci }}">{{ $labelMetode }}</option>
+                            @endforeach
+                        </select>
                     </div>
                     <div class="flex justify-end gap-2 pt-2">
                         <button type="button" @click="showPayModal=false" class="btn btn-outline">Batal</button>

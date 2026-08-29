@@ -108,6 +108,7 @@ Homestead.yaml
 # Penanda "jendela masih terbuka" yang ditulis saat aplikasi berjalan —
 # bukan sumber kode.
 /storage/framework/jpos-detak
+/storage/framework/jpos-tutup
 
 # Cache & konfigurasi editor
 .phpactor.json

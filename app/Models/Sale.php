@@ -67,6 +67,17 @@ class Sale extends Model
     }
 
     /**
+     * Setiap kali uang diterima untuk penjualan ini - DP, cicilan, pelunasan.
+     *
+     * `payment_method` di tabel ini hanya menyimpan cara pembayaran PERTAMA. Untuk
+     * pertanyaan "uang ini masuk lewat apa saja", inilah sumbernya. Lihat migrasi 000350.
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(SalePayment::class);
+    }
+
+    /**
      * Nomor invoice berikutnya untuk hari ini, mis. INV2607280001.
      *
      * Versi lama membaca 4 karakter terakhir (`substr($no, -4)`) dan selalu memadatkan

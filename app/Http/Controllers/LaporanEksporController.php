@@ -7,10 +7,12 @@ use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SalePayment;
 use App\Support\Akuntansi;
 use App\Support\Angka;
 use App\Support\EksporLaporan;
 use App\Support\Laporan;
+use App\Support\MetodeBayar;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
@@ -172,9 +174,16 @@ class LaporanEksporController extends Controller
     {
         [$dari, $sampai] = $this->rentang($request);
 
-        $penjualan = Sale::with(['customer', 'cashier'])
+        // Penyaring metode dijaga sama persis dengan yang di layar (ReportController::penjualan).
+        // Kalau tidak, pemilik toko yang menyaring "QRIS" lalu menekan Unduh PDF akan
+        // mendapat berkas berisi SELURUH transaksi - dan tidak akan sadar sampai ia
+        // memakainya untuk menagih.
+        $metode = in_array($request->metode, MetodeBayar::kunci(), true) ? $request->metode : null;
+
+        $penjualan = Sale::with(['customer', 'cashier', 'payments'])
             ->whereDate('created_at', '>=', $dari)
             ->whereDate('created_at', '<=', $sampai)
+            ->when($metode, fn ($q) => $q->whereHas('payments', fn ($p) => $p->where('method', $metode)))
             ->orderBy('created_at')
             ->get()
             ->map(fn (Sale $s) => [
@@ -182,10 +191,31 @@ class LaporanEksporController extends Controller
                 'invoice' => $s->invoice_no,
                 'pelanggan' => $s->customer->name ?? 'Umum',
                 'kasir' => $s->cashier->name ?? '-',
+                'metode' => $s->payments->isEmpty()
+                    ? '-'
+                    : $s->payments->map(fn ($b) => MetodeBayar::label($b->method))->unique()->implode(', '),
                 'status' => $this->labelStatus($s->order_status),
                 'diskon' => (float) $s->discount,
                 'pajak' => (float) $s->tax_amount,
                 'total' => (float) $s->total,
+            ]);
+
+        // Uang yang benar-benar diterima pada rentang ini, dikelompokkan per metode.
+        // Angkanya SENGAJA tidak sama dengan jumlah kolom Total - alasannya ada di catatan
+        // di bawah, dan ikut tercetak supaya tidak dikira laporannya rusak.
+        $uangMasuk = SalePayment::query()
+            ->join('sales', 'sales.id', '=', 'sale_payments.sale_id')
+            ->whereDate('sale_payments.created_at', '>=', $dari)
+            ->whereDate('sale_payments.created_at', '<=', $sampai)
+            ->where('sales.order_status', '<>', 'cancelled')
+            ->when($metode, fn ($q) => $q->where('sale_payments.method', $metode))
+            ->selectRaw('sale_payments.method, COUNT(*) as jumlah, SUM(sale_payments.amount) as nilai')
+            ->groupBy('sale_payments.method')
+            ->get()
+            ->map(fn ($b) => [
+                'metode' => MetodeBayar::label($b->method),
+                'jumlah' => (int) $b->jumlah,
+                'nilai' => (float) $b->nilai,
             ]);
 
         return Laporan::buat('Laporan Penjualan', 'penjualan')
@@ -201,6 +231,7 @@ class LaporanEksporController extends Controller
                 ['label' => 'No. Invoice', 'key' => 'invoice', 'lebar' => 20],
                 ['label' => 'Pelanggan', 'key' => 'pelanggan', 'lebar' => 24],
                 ['label' => 'Kasir', 'key' => 'kasir', 'lebar' => 18],
+                ['label' => 'Metode Bayar', 'key' => 'metode', 'lebar' => 20],
                 ['label' => 'Status', 'key' => 'status', 'lebar' => 14],
                 ['label' => 'Diskon', 'key' => 'diskon', 'format' => 'rupiah'],
                 ['label' => 'Pajak', 'key' => 'pajak', 'format' => 'rupiah'],
@@ -211,9 +242,20 @@ class LaporanEksporController extends Controller
                 'pajak' => $penjualan->sum('pajak'),
                 'total' => $penjualan->sum('total'),
             ])
+            ->bagian('Uang Masuk per Metode', [
+                ['label' => 'Metode Pembayaran', 'key' => 'metode', 'lebar' => 24],
+                ['label' => 'Jumlah Penerimaan', 'key' => 'jumlah'],
+                ['label' => 'Nilai', 'key' => 'nilai', 'format' => 'rupiah'],
+            ], $uangMasuk->all(), [
+                'metode' => 'TOTAL',
+                'jumlah' => $uangMasuk->sum('jumlah'),
+                'nilai' => $uangMasuk->sum('nilai'),
+            ])
             ->catatan(
                 'Kolom Total memuat pajak, karena ini nilai yang benar-benar dibayar pembeli. Untuk omset tanpa pajak, lihat Laporan Laba Rugi.',
                 'Pesanan berstatus Menunggu dan Batal ikut ditampilkan supaya seluruh transaksi bisa ditelusuri, tapi keduanya tidak dihitung sebagai omset.',
+                'Uang Masuk per Metode menghitung uang yang BENAR-BENAR diterima pada rentang tanggal ini, jadi jumlahnya sengaja tidak sama dengan jumlah kolom Total. DP yang diterima bulan ini untuk pesanan yang selesai bulan depan sudah masuk di sini tapi belum jadi omset; sebaliknya pesanan yang selesai bulan ini tapi DP-nya diterima bulan lalu hanya tercatat sebesar pelunasannya. Inilah angka yang diadu dengan isi laci dan mutasi rekening.',
+                'Transaksi yang dibatalkan tidak dihitung sebagai uang masuk karena uangnya sudah dikembalikan ke pembeli.',
             );
     }
 

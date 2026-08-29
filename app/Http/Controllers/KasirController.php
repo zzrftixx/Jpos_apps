@@ -9,10 +9,12 @@ use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SalePayment;
 use App\Models\Setting;
 use App\Models\StockMovement;
 use App\Models\Unit;
 use App\Support\Angka;
+use App\Support\MetodeBayar;
 use App\Support\ProductCatalog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -264,7 +266,10 @@ class KasirController extends Controller
                 'total' => $total,
                 'paid_amount' => $data['paid_amount'],
                 'change_amount' => $isWaitingList ? 0 : ($data['paid_amount'] - $total),
-                'payment_method' => $data['payment_method'],
+                // Dikanonkan sebelum disimpan supaya baris baru tidak menambah ejaan
+                // keempat untuk hal yang sama. Baris LAMA sengaja tidak ditulis ulang -
+                // MetodeBayar menerjemahkannya saat dibaca. Lihat App\Support\MetodeBayar.
+                'payment_method' => MetodeBayar::normal($data['payment_method']),
                 'status' => 'completed',
                 'order_status' => $isWaitingList ? 'waiting' : 'completed',
                 'due_date' => $data['due_date'] ?? null,
@@ -302,6 +307,21 @@ class KasirController extends Controller
                         'user_id' => $request->user()->id,
                     ]);
                 }
+            }
+
+            // Uang yang benar-benar masuk, bukan yang diserahkan pembeli: menerima
+            // Rp 50.000 untuk belanja Rp 43.000 menambah Rp 43.000 di laci, bukan Rp 50.000.
+            // Transaksi tertahan tidak pernah membawa uang, jadi tidak punya baris di sini.
+            $uangMasuk = $sale->paid_amount - $sale->change_amount;
+
+            if (! $isParked && $uangMasuk > 0) {
+                SalePayment::create([
+                    'sale_id' => $sale->id,
+                    'method' => $sale->payment_method,
+                    'amount' => $uangMasuk,
+                    'kind' => $isWaitingList ? 'dp' : 'bayar',
+                    'user_id' => $request->user()->id,
+                ]);
             }
 
             return $sale;
@@ -374,13 +394,35 @@ class KasirController extends Controller
         // Transaksi tertahan sengaja TIDAK tampil di sini: ia punya jalur sendiri
         // (kasir.tahan). Mencampurnya membuat daftar pesanan penuh keranjang yang umurnya
         // cuma beberapa menit, dan pemilik toko kehilangan gambaran pesanan sungguhan.
-        $orders = Sale::with(['items', 'customer', 'cashier'])
+        // Penyaring metode pembayaran. Disaring lewat tabel penerimaan uang, BUKAN lewat
+        // kolom sales.payment_method: pesanan yang DP-nya tunai lalu dilunasi QRIS harus
+        // muncul di KEDUA saringan, karena uangnya memang masuk lewat keduanya. Menyaring
+        // dari kolom itu hanya akan menemukannya di "Tunai" dan menyembunyikan Rp 300.000
+        // yang sebenarnya masuk lewat QRIS.
+        //
+        // 'lainnya' menampung ejaan lama yang tidak dikenali - dibiarkan bisa dicari,
+        // bukan disembunyikan, supaya data yang aneh ketahuan alih-alih hilang diam-diam.
+        $metode = in_array($request->metode, MetodeBayar::kunci(), true) ? $request->metode : null;
+
+        $orders = Sale::with(['items', 'customer', 'cashier', 'payments'])
             ->where('order_status', $status)
             ->whereNull('parked_at')
             ->when($request->q, fn($q) => $q->where('invoice_no', 'like', "%{$request->q}%"))
+            ->when($metode, fn($q) => $q->whereHas('payments', fn($p) => $p->where('method', $metode)))
             ->orderByDesc('created_at')
             ->paginate(15)
             ->withQueryString();
+
+        // Jumlah pesanan per metode untuk angka kecil di tombol penyaring. Satu query untuk
+        // seluruh tombol - bukan satu query per tombol, yang akan menahan kasir (B1).
+        $jumlahMetode = SalePayment::query()
+            ->join('sales', 'sales.id', '=', 'sale_payments.sale_id')
+            ->where('sales.order_status', $status)
+            ->whereNull('sales.parked_at')
+            ->selectRaw('sale_payments.method, COUNT(DISTINCT sales.id) as jumlah')
+            ->groupBy('sale_payments.method')
+            ->pluck('jumlah', 'method')
+            ->all();
 
         $waitingCount = Sale::pesanan()->count();
 
@@ -388,7 +430,9 @@ class KasirController extends Controller
         // struk untuk pelanggan, invoice untuk arsip toko atau lampiran penagihan.
         $pilihDokumen = (bool) (Setting::get('template_struk', [])['pilih_dokumen'] ?? false);
 
-        return view('transaksi.kasir.waiting-list', compact('orders', 'status', 'waitingCount', 'pilihDokumen'));
+        return view('transaksi.kasir.waiting-list', compact(
+            'orders', 'status', 'waitingCount', 'pilihDokumen', 'metode', 'jumlahMetode'
+        ));
     }
 
     public function payWaiting(Request $request, Sale $sale)
@@ -399,15 +443,22 @@ class KasirController extends Controller
 
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.01'],
+            // Boleh kosong supaya permintaan lama (dan uji yang sudah ada) tidak patah;
+            // yang kosong dianggap memakai cara yang sama dengan DP-nya.
+            'method' => ['nullable', 'string', 'max:30'],
         ]);
+
+        $metodeBayar = MetodeBayar::normal($data['method'] ?? $sale->payment_method);
 
         // Dikunci & diperiksa ulang dalam transaksi supaya dua klik "Lunasi" yang hampir
         // bersamaan tidak menambah pembayaran dua kali ke pesanan yang sama.
-        $sale = DB::transaction(function () use ($sale, $data) {
+        $sale = DB::transaction(function () use ($sale, $data, $metodeBayar, $request) {
             $sale = Sale::lockForUpdate()->find($sale->id);
             if (! $sale || $sale->order_status !== 'waiting') {
                 return null;
             }
+
+            $kembalianSebelumnya = (float) $sale->change_amount;
 
             $sale->paid_amount += $data['amount'];
 
@@ -417,6 +468,21 @@ class KasirController extends Controller
             }
 
             $sale->save();
+
+            // Uang bersih yang benar-benar masuk kali ini: yang diserahkan, dikurangi
+            // kembalian yang baru muncul karena pembayaran ini. Membayar Rp 350.000 untuk
+            // sisa Rp 300.000 menambah Rp 300.000 di laci - bukan Rp 350.000.
+            $uangMasuk = $data['amount'] - ((float) $sale->change_amount - $kembalianSebelumnya);
+
+            if ($uangMasuk > 0) {
+                SalePayment::create([
+                    'sale_id' => $sale->id,
+                    'method' => $metodeBayar,
+                    'amount' => $uangMasuk,
+                    'kind' => 'pelunasan',
+                    'user_id' => $request->user()->id,
+                ]);
+            }
 
             return $sale;
         });
@@ -751,7 +817,8 @@ class KasirController extends Controller
      */
     public function receipt(Request $request, Sale $sale)
     {
-        $sale->load(['items', 'customer', 'cashier']);
+        // 'payments' ikut dimuat: struk merinci tiap penerimaan uang (DP tunai, lunas QRIS).
+        $sale->load(['items', 'customer', 'cashier', 'payments']);
         $storeProfile = Setting::get('store_profile', []);
         $templateStruk = Setting::get('template_struk', []);
         $printerStruk = Setting::get('printer_struk', ['paper_size' => 80, 'margin' => 0, 'font_size' => 12]);
