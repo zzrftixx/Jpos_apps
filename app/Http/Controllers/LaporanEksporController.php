@@ -180,9 +180,16 @@ class LaporanEksporController extends Controller
         // memakainya untuk menagih.
         $metode = in_array($request->metode, MetodeBayar::kunci(), true) ? $request->metode : null;
 
+        // Status pesanan dijaga sama persis dengan yang di layar, dengan alasan yang sama.
+        // Nilai karangan diabaikan, bukan diteruskan mentah ke query.
+        $status = in_array($request->order_status, ['completed', 'waiting', 'cancelled'], true)
+            ? $request->order_status
+            : null;
+
         $penjualan = Sale::with(['customer', 'cashier', 'payments'])
             ->whereDate('created_at', '>=', $dari)
             ->whereDate('created_at', '<=', $sampai)
+            ->when($status, fn ($q) => $q->where('order_status', $status))
             ->when($metode, fn ($q) => $q->whereHas('payments', fn ($p) => $p->where('method', $metode)))
             ->orderBy('created_at')
             ->get()
@@ -198,6 +205,30 @@ class LaporanEksporController extends Controller
                 'diskon' => (float) $s->discount,
                 'pajak' => (float) $s->tax_amount,
                 'total' => (float) $s->total,
+            ]);
+
+        // Rincian per status - pertanyaan yang sama dengan yang dijawab di layar.
+        //
+        // Ditambahkan supaya berkas unduhan dan layar tidak menjawab pertanyaan yang berbeda.
+        // Pemilik toko yang membuka PDF-nya akan bertanya persis seperti saat melihat layar:
+        // "kalau semuanya dijumlahkan jadi berapa, dan isinya apa saja" - dan jawabannya
+        // harus ada di berkas itu juga, bukan cuma di layar yang sedang tidak ia buka.
+        $perStatus = Sale::whereDate('created_at', '>=', $dari)
+            ->whereDate('created_at', '<=', $sampai)
+            ->when($status, fn ($q) => $q->where('order_status', $status))
+            ->selectRaw('order_status, COUNT(*) as jumlah, SUM(total) as nilai')
+            ->groupBy('order_status')
+            ->get()
+            ->map(fn ($r) => [
+                'status' => $this->labelStatus($r->order_status),
+                'jumlah' => (int) $r->jumlah,
+                'nilai' => (float) $r->nilai,
+                'catatan' => match ($r->order_status) {
+                    'completed' => 'dihitung sebagai omset',
+                    'waiting' => 'piutang, belum jadi omset',
+                    'cancelled' => 'uangnya tidak pernah masuk',
+                    default => '-',
+                },
             ]);
 
         // Uang yang benar-benar diterima pada rentang ini, dikelompokkan per metode.
@@ -242,6 +273,16 @@ class LaporanEksporController extends Controller
                 'pajak' => $penjualan->sum('pajak'),
                 'total' => $penjualan->sum('total'),
             ])
+            ->bagian('Rincian Seluruh Transaksi', [
+                ['label' => 'Status Pesanan', 'key' => 'status', 'lebar' => 20],
+                ['label' => 'Jumlah', 'key' => 'jumlah'],
+                ['label' => 'Nilai', 'key' => 'nilai', 'format' => 'rupiah'],
+                ['label' => 'Keterangan', 'key' => 'catatan', 'lebar' => 30],
+            ], $perStatus->all(), [
+                'status' => 'JUMLAH SEMUANYA',
+                'jumlah' => $perStatus->sum('jumlah'),
+                'nilai' => $perStatus->sum('nilai'),
+            ])
             ->bagian('Uang Masuk per Metode', [
                 ['label' => 'Metode Pembayaran', 'key' => 'metode', 'lebar' => 24],
                 ['label' => 'Jumlah Penerimaan', 'key' => 'jumlah'],
@@ -256,6 +297,7 @@ class LaporanEksporController extends Controller
                 'Pesanan berstatus Menunggu dan Batal ikut ditampilkan supaya seluruh transaksi bisa ditelusuri, tapi keduanya tidak dihitung sebagai omset.',
                 'Uang Masuk per Metode menghitung uang yang BENAR-BENAR diterima pada rentang tanggal ini, jadi jumlahnya sengaja tidak sama dengan jumlah kolom Total. DP yang diterima bulan ini untuk pesanan yang selesai bulan depan sudah masuk di sini tapi belum jadi omset; sebaliknya pesanan yang selesai bulan ini tapi DP-nya diterima bulan lalu hanya tercatat sebesar pelunasannya. Inilah angka yang diadu dengan isi laci dan mutasi rekening.',
                 'Transaksi yang dibatalkan tidak dihitung sebagai uang masuk karena uangnya sudah dikembalikan ke pembeli.',
+                'Pada Rincian Seluruh Transaksi, JUMLAH SEMUANYA adalah penjumlahan ketiga status - dan itulah cara aplikasi versi lama menghitung omset, sehingga angkanya dulu terlihat jauh lebih besar. Yang benar-benar omset hanya baris berstatus Selesai.',
             );
     }
 

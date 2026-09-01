@@ -115,17 +115,46 @@ class EksporLaporanTest extends JposTestCase
     {
         $this->siapkanData();
 
+        // Tanggalnya DIPATOK, bukan diturunkan dari now().
+        //
+        // Versi lama memakai `periode(now()->startOfMonth(), now())`. Setiap TANGGAL 1,
+        // awal bulan sama dengan hari ini, sehingga Laporan::periode() dengan benar
+        // mencetak "Per 01/09/2026" - dan test yang mencari "s/d" gagal. Cacatnya ada di
+        // test, bukan di kode: ia hanya bisa gagal satu hari dari setiap tiga puluh, dan
+        // gagalnya persis di hari yang paling mungkin ada orang menutup buku bulanan.
         $html = view('laporan.ekspor.pdf', [
             'laporan' => \App\Support\Laporan::buat('Uji Kop', 'uji')
-                ->periode(now()->startOfMonth()->toDateString(), now()->toDateString())
+                ->periode('2026-01-01', '2026-01-31')
                 ->pencetak('Administrator')
                 ->bagian('Isi', [['label' => 'A', 'key' => 'a']], [['a' => 'baris']]),
         ])->render();
 
         $this->assertStringContainsString('Toko Jayla Makmur', $html, 'Kop toko hilang.');
         $this->assertStringContainsString('Jl. Merdeka No. 17, Semarang', $html);
-        $this->assertStringContainsString('s/d', $html, 'Periode tidak tercetak.');
+        $this->assertStringContainsString('01/01/2026 s/d 31/01/2026', $html, 'Periode rentang tidak tercetak.');
         $this->assertStringContainsString('Administrator', $html, 'Nama pencetak tidak tercetak.');
+    }
+
+    /**
+     * Cabang satu hari - yang membuat test di atas gagal setiap tanggal 1.
+     *
+     * Kalau dari dan sampai sama, laporan mencetak "Per <tanggal>", bukan rentang. Perilaku
+     * ini benar dan sengaja; sekarang ada yang menjaganya supaya tidak ada yang "memperbaiki"
+     * Laporan::periode() demi membuat test lama hijau.
+     */
+    public function test_periode_satu_hari_dicetak_sebagai_per_tanggal(): void
+    {
+        $this->siapkanData();
+
+        $html = view('laporan.ekspor.pdf', [
+            'laporan' => \App\Support\Laporan::buat('Uji Kop', 'uji')
+                ->periode('2026-01-15', '2026-01-15')
+                ->pencetak('Administrator')
+                ->bagian('Isi', [['label' => 'A', 'key' => 'a']], [['a' => 'baris']]),
+        ])->render();
+
+        $this->assertStringContainsString('Per 15/01/2026', $html);
+        $this->assertStringNotContainsString('s/d', $html, 'Satu hari tidak boleh dicetak sebagai rentang.');
     }
 
     /**
@@ -269,6 +298,97 @@ class EksporLaporanTest extends JposTestCase
 
         $this->assertStringNotContainsString('Rp 80.000', $lampau, 'Periode pada alamat diabaikan.');
         $this->assertStringContainsString(now()->subYears(3)->format('d/m/Y'), $lampau, 'Periode yang tercetak salah.');
+    }
+
+    /**
+     * Penyaring Status Pesanan di layar WAJIB ikut ke berkas yang diunduh.
+     *
+     * Cacat nyata yang ditemukan pemilik toko: ia menyaring "Dibatalkan", menekan Unduh PDF
+     * tiga kali dengan tiga status berbeda, dan mendapat TIGA BERKAS YANG UKURANNYA SAMA
+     * PERSIS - karena pengekspornya tidak pernah menerima parameter itu sama sekali.
+     *
+     * Ini jenis kegagalan yang paling berbahaya: berkasnya terbuka, isinya rapi, angkanya
+     * terlihat sah. Yang salah cuma cakupannya - dan itu baru ketahuan setelah dipakai
+     * menagih atau melapor.
+     */
+    public function test_penyaring_status_pesanan_ikut_ke_berkas_unduhan(): void
+    {
+        $buat = function (string $status, string $invoice, float $nilai) {
+            \App\Models\Sale::create([
+                'invoice_no' => $invoice,
+                'user_id' => $this->admin->id,
+                'subtotal' => $nilai, 'discount' => 0, 'tax_amount' => 0, 'total' => $nilai,
+                'paid_amount' => $nilai, 'change_amount' => 0,
+                'payment_method' => 'tunai', 'status' => 'completed', 'order_status' => $status,
+            ]);
+        };
+
+        $buat('completed', 'INVLUNAS0001', 11111);
+        $buat('waiting', 'INVTUNGGU001', 22222);
+        $buat('cancelled', 'INVBATAL0001', 33333);
+
+        // Tanpa penyaring: ketiganya ikut.
+        $semua = $this->teksLembar('penjualan');
+        foreach (['INVLUNAS0001', 'INVTUNGGU001', 'INVBATAL0001'] as $inv) {
+            $this->assertStringContainsString($inv, $semua, "Tanpa penyaring, {$inv} harus ikut.");
+        }
+
+        // Dengan penyaring: HANYA yang diminta.
+        $hanyaBatal = $this->teksLembar('penjualan', ['order_status' => 'cancelled']);
+
+        $this->assertStringContainsString('INVBATAL0001', $hanyaBatal);
+        $this->assertStringNotContainsString('INVLUNAS0001', $hanyaBatal,
+            'Penyaring status diabaikan - berkas unduhan memuat transaksi di luar yang disaring.');
+        $this->assertStringNotContainsString('INVTUNGGU001', $hanyaBatal);
+
+        $hanyaTunggu = $this->teksLembar('penjualan', ['order_status' => 'waiting']);
+        $this->assertStringContainsString('INVTUNGGU001', $hanyaTunggu);
+        $this->assertStringNotContainsString('INVBATAL0001', $hanyaTunggu);
+    }
+
+    /**
+     * Berkas unduhan menjawab pertanyaan yang SAMA dengan layar.
+     *
+     * Pemilik toko yang membuka PDF akan bertanya persis seperti saat melihat layar: "kalau
+     * semuanya dijumlahkan jadi berapa, dan isinya apa saja". Kalau jawabannya cuma ada di
+     * layar, ia kembali harus memakai kalkulator - persis keluhan yang memunculkan fitur ini.
+     */
+    public function test_berkas_unduhan_memuat_rincian_per_status(): void
+    {
+        $buat = function (string $status, string $invoice, float $nilai) {
+            \App\Models\Sale::create([
+                'invoice_no' => $invoice,
+                'user_id' => $this->admin->id,
+                'subtotal' => $nilai, 'discount' => 0, 'tax_amount' => 0, 'total' => $nilai,
+                'paid_amount' => $nilai, 'change_amount' => 0,
+                'payment_method' => 'tunai', 'status' => 'completed', 'order_status' => $status,
+            ]);
+        };
+
+        $buat('completed', 'INVLUNAS0002', 1000000);
+        $buat('waiting', 'INVTUNGGU002', 2000000);
+        $buat('cancelled', 'INVBATAL0002', 3000000);
+
+        $teks = $this->teksLembar('penjualan');
+
+        $this->assertStringContainsString('Rincian Seluruh Transaksi', $teks);
+        $this->assertStringContainsString('JUMLAH SEMUANYA', $teks);
+        $this->assertStringContainsString('piutang, belum jadi omset', $teks);
+        $this->assertStringContainsString('uangnya tidak pernah masuk', $teks);
+
+        // Yang paling menentukan: totalnya dihitungkan, bukan dibiarkan ke kalkulator.
+        $this->assertStringContainsString('Rp 6.000.000', $teks,
+            'Jumlah ketiga status tidak dihitungkan di berkas unduhan.');
+    }
+
+    /** Status karangan di alamat diabaikan, bukan diteruskan mentah ke query. */
+    public function test_status_karangan_diabaikan_oleh_pengekspor(): void
+    {
+        $this->siapkanData();
+
+        $this->actingAs($this->admin)
+            ->get(route('laporan.ekspor', ['jenis' => 'penjualan', 'format' => 'xlsx', 'order_status' => 'ngawur']))
+            ->assertOk();
     }
 
     /**

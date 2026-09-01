@@ -69,8 +69,25 @@ class ReportController extends Controller
             ->pluck('nilai', 'method')
             ->all();
 
+        // RINCIAN PER STATUS - supaya pemilik toko tidak perlu kalkulator.
+        //
+        // Diminta langsung oleh pemilik toko: "kalau aku pengin tahu ya harus hitung manual
+        // dong mas, harus kalkulator". Ia benar. Sebelum ini, untuk tahu ke mana perginya
+        // selisih antara angka lama dan angka sekarang, ia harus menyaring status satu per
+        // satu lalu menjumlahkan barisnya sendiri - dan kotak ringkasan di atas SENGAJA
+        // tidak ikut berubah saat disaring, karena ia memang khusus menghitung omset (H5).
+        //
+        // Sebuah penjelasan yang benar tapi memaksa orang membuka kalkulator sama saja
+        // dengan tidak menjelaskan. Satu query dikelompokkan, bukan tiga (B1).
+        $rincianStatus = Sale::whereDate('created_at', '>=', $from)
+            ->whereDate('created_at', '<=', $to)
+            ->selectRaw('order_status, COUNT(*) as jumlah, SUM(total) as nilai')
+            ->groupBy('order_status')
+            ->get()
+            ->keyBy('order_status');
+
         return view('laporan.penjualan', compact(
-            'sales', 'summary', 'from', 'to', 'metode', 'uangMasuk'
+            'sales', 'summary', 'from', 'to', 'metode', 'uangMasuk', 'rincianStatus'
         ));
     }
 

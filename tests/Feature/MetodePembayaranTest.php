@@ -302,6 +302,74 @@ class MetodePembayaranTest extends JposTestCase
             'Tombol unduh kehilangan penyaring - berkasnya akan berisi seluruh transaksi.');
     }
 
+    /**
+     * Rincian per status tampil di layar, supaya pemilik toko tidak perlu kalkulator.
+     *
+     * Diminta langsung olehnya: "kalau aku pengin tahu ya harus hitung manual dong mas,
+     * harus kalkulator". Sebelum ini ia harus menyaring status satu per satu lalu
+     * menjumlahkan barisnya sendiri - dan kotak ringkasan sengaja tidak ikut berubah saat
+     * disaring, karena ia memang khusus menghitung omset (H5).
+     */
+    public function test_rincian_per_status_tampil_tanpa_perlu_dihitung_manual(): void
+    {
+        $p = $this->makeProduct(['sell_price' => 1000000, 'stock' => 100]);
+
+        // Lunas 1.000.000
+        $this->actingAs($this->kasir)->postJson('/kasir', [
+            'items' => [['product_id' => $p->id, 'qty' => 1]],
+            'paid_amount' => 1000000, 'payment_method' => 'tunai',
+        ])->assertOk();
+
+        // Belum lunas 2.000.000 (DP 500.000)
+        $this->actingAs($this->kasir)->postJson('/kasir', [
+            'items' => [['product_id' => $p->id, 'qty' => 2]],
+            'paid_amount' => 500000, 'payment_method' => 'tunai', 'is_waiting_list' => true,
+        ])->assertOk();
+
+        // Dibatalkan 3.000.000
+        $this->actingAs($this->kasir)->postJson('/kasir', [
+            'items' => [['product_id' => $p->id, 'qty' => 3]],
+            'paid_amount' => 700000, 'payment_method' => 'tunai', 'is_waiting_list' => true,
+        ])->assertOk();
+        $batal = \App\Models\Sale::latest('id')->firstOrFail();
+        $this->actingAs($this->admin)->post("/kasir/waiting-list/{$batal->id}/cancel");
+
+        $html = $this->actingAs($this->admin)->get('/laporan/penjualan')->assertOk()->getContent();
+
+        $this->assertStringContainsString('Rincian Seluruh Transaksi', $html);
+        $this->assertStringContainsString('Rp 1.000.000', $html, 'Nilai lunas tidak tampil.');
+        $this->assertStringContainsString('Rp 2.000.000', $html, 'Nilai pesanan belum lunas tidak tampil.');
+        $this->assertStringContainsString('Rp 3.000.000', $html, 'Nilai transaksi batal tidak tampil.');
+
+        // Yang paling menentukan: jumlah ketiganya dihitungkan, bukan dibiarkan ke kalkulator.
+        $this->assertStringContainsString('Rp 6.000.000', $html,
+            'Jumlah ketiga status tidak dihitungkan - pemilik toko masih harus pakai kalkulator.');
+    }
+
+    /** Omset resmi TIDAK ikut berubah oleh rincian baru itu - ia tetap hanya yang lunas. */
+    public function test_rincian_baru_tidak_menggeser_angka_omset(): void
+    {
+        $p = $this->makeProduct(['sell_price' => 1000000, 'stock' => 100]);
+
+        $this->actingAs($this->kasir)->postJson('/kasir', [
+            'items' => [['product_id' => $p->id, 'qty' => 1]],
+            'paid_amount' => 1000000, 'payment_method' => 'tunai',
+        ])->assertOk();
+
+        $this->actingAs($this->kasir)->postJson('/kasir', [
+            'items' => [['product_id' => $p->id, 'qty' => 5]],
+            'paid_amount' => 100000, 'payment_method' => 'tunai', 'is_waiting_list' => true,
+        ])->assertOk();
+
+        $html = $this->actingAs($this->admin)->get('/laporan/penjualan')->assertOk()->getContent();
+
+        $ringkasan = substr($html, 0, strpos($html, 'Rincian Seluruh Transaksi'));
+
+        $this->assertStringContainsString('Rp 1.000.000', $ringkasan);
+        $this->assertStringNotContainsString('Rp 6.000.000', $ringkasan,
+            'Pesanan belum lunas bocor ke kotak Total Pendapatan - itu melanggar HUKUM 5.');
+    }
+
     /** Warna lencana hanya memakai kelas yang sudah ada di CSS terkompilasi (B2). */
     public function test_kelas_lencana_sudah_ada_di_css_terkompilasi(): void
     {
