@@ -44,6 +44,22 @@ class PrepareCommand extends Command
         $this->backupHarian($backup);
         $this->bersihkanTautanStorageRusak();
 
+        // Melepas stok yang dikunci keranjang TERTAHAN yang ditinggal kasir kemarin.
+        //
+        // Dipasang di sini, bukan lewat cron: komputer toko tidak selalu menyala, dan
+        // menambah penjadwal sistem berarti satu bagian lagi yang bisa diam-diam mati tanpa
+        // ada yang tahu. Aplikasi yang dinyalakan tiap pagi adalah jadwal yang paling andal
+        // di lingkungan ini.
+        //
+        // Perintahnya HANYA menyentuh transaksi tertahan (`parked_at IS NOT NULL`), tidak
+        // pernah pesanan DP - lihat BersihkanKeranjangCommand untuk alasan lengkapnya.
+        try {
+            $this->callSilently('jpos:bersihkan-keranjang');
+        } catch (\Throwable) {
+            // Gagal melepas keranjang bukan alasan aplikasi gagal menyala. Stok yang
+            // tertahan sehari lagi jauh lebih ringan daripada kasir yang tidak bisa buka.
+        }
+
         // Katalog produk yang tersimpan bisa berasal dari versi aplikasi sebelumnya.
         try {
             $catalog->flush();
