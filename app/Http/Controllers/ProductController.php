@@ -192,9 +192,12 @@ class ProductController extends Controller
             $data['image'] = $this->saveOptimizedImage($request->file('image'), 'products');
         }
 
-        $oldStock = $product->stock;
+        DB::transaction(function () use ($data, $unitsInput, $product, $request) {
+            // Dikunci & dibaca ulang di dalam transaksi untuk mencegah penghapusan stok 
+            // secara diam-diam (stale read) jika ada penjualan saat form sedang terbuka.
+            $product = Product::lockForUpdate()->find($product->id);
+            $oldStock = $product->stock;
 
-        DB::transaction(function () use ($data, $unitsInput, $product, $oldStock, $request) {
             $product->update($data);
             $this->syncUnits($product, $unitsInput);
             $this->simpanLokasiRak($product, $request);

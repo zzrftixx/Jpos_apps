@@ -532,6 +532,8 @@ class KasirController extends Controller
             }
 
             $sale->order_status = 'cancelled';
+            $sale->paid_amount = 0;
+            $sale->change_amount = 0;
             $sale->save();
         });
 
