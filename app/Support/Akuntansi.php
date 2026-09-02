@@ -331,7 +331,25 @@ class Akuntansi
      */
     private static function kasPada(string $tanggal, string $mulai, float $saldoAwal): float
     {
-        $dariPenjualan = Sale::whereDate('created_at', '>=', $mulai)
+        // Transaksi yang DIBATALKAN dikeluarkan dari kas.
+        //
+        // Pesanan DP yang dibatalkan tetap menyimpan paid_amount-nya - dan itu benar, uang
+        // itu sungguh pernah diterima. Yang salah adalah menganggapnya masih ada di laci:
+        // saat pesanan dibatalkan, barangnya kembali ke rak dan uangnya kembali ke pembeli.
+        // Sebelum perbaikan ini, DP pesanan batal terkunci di Kas selamanya, dan kasir yang
+        // menghitung lacinya selalu terlihat kurang setor.
+        //
+        // KENAPA BUKAN MENOLKAN paid_amount SAAT PEMBATALAN. Itu menghapus fakta bahwa
+        // uangnya pernah diterima - struk pesanan batal akan menampilkan DP 0, dan
+        // 17 pesanan batal yang sudah terlanjur ada di database client tetap salah karena
+        // penolan hanya berlaku ke depan. Memperbaiki PEMBACANYA menyembuhkan riwayat
+        // sekaligus, tanpa menghapus satu baris pun. Prinsip yang sama dipakai MetodeBayar.
+        //
+        // WAJIB SEJALAN dengan uangMukaPelanggan() di bawah: DP batal dulu muncul di KEDUA
+        // sisi neraca - sebagai Kas (aset) dan Uang Muka Pelanggan (kewajiban) - sehingga
+        // saling meniadakan. Mengeluarkannya dari satu sisi saja MERUSAK H7.
+        $dariPenjualan = Sale::where('order_status', '<>', 'cancelled')
+            ->whereDate('created_at', '>=', $mulai)
             ->whereDate('created_at', '<=', $tanggal)
             ->selectRaw('COALESCE(SUM(paid_amount - change_amount), 0) as nilai')
             ->value('nilai');
@@ -391,7 +409,16 @@ class Akuntansi
     private static function uangMukaPelanggan(string $tanggal, string $mulai): float
     {
         return Angka::bulat(
-            Sale::whereIn('order_status', ['waiting', 'cancelled'])
+            // 'cancelled' DIKELUARKAN, sepasang dengan kasPada() di atas. Pesanan yang
+            // dibatalkan bukan lagi kewajiban toko: barangnya sudah kembali ke rak dan
+            // uangnya sudah kembali ke pembeli. Membiarkannya di sini sementara kasPada
+            // sudah mengeluarkannya akan membuat KEWAJIBAN lebih besar dari ASET - neraca
+            // tidak seimbang, dan H7 dilanggar.
+            //
+            // ASUMSI YANG DIPAKAI: DP pesanan yang dibatalkan DIKEMBALIKAN ke pembeli.
+            // Kalau sebuah toko justru menghanguskan DP (uangnya tetap di laci), itu
+            // pendapatan lain - catat lewat Kas Masuk, jangan diam-diam ditinggal di sini.
+            Sale::where('order_status', 'waiting')
                 ->whereDate('created_at', '>=', $mulai)
                 ->whereDate('created_at', '<=', $tanggal)
                 ->sum('paid_amount')
