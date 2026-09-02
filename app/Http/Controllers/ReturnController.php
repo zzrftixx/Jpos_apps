@@ -6,6 +6,8 @@ use App\Http\Controllers\Concerns\ResolvesUnitPricing;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SalePayment;
+use App\Support\MetodeBayar;
 use App\Models\SaleReturn;
 use App\Models\SaleReturnItem;
 use App\Models\Setting;
@@ -85,6 +87,9 @@ class ReturnController extends Controller
             'add_items.*.qty' => ['required_with:add_items', 'numeric', 'min:0.001'],
             'add_items.*.unit_type' => ['nullable', 'string'],
             'additional_payment' => ['nullable', 'numeric', 'min:0'],
+            // Boleh kosong supaya permintaan lama tidak patah; yang kosong dianggap
+            // memakai cara yang sama dengan transaksi aslinya.
+            'additional_payment_method' => ['nullable', 'string', 'max:30'],
         ]);
 
         if (empty($data['items']) && empty($data['add_items'])) {
@@ -224,6 +229,32 @@ class ReturnController extends Controller
                 $sale->total += $requiredPayment;
                 $sale->paid_amount += $data['additional_payment'];
                 $sale->change_amount = max($sale->paid_amount - $sale->total, 0);
+
+                // Uang tambahan saat tukar-tambah adalah PENERIMAAN UANG SUNGGUHAN, dan
+                // sebelum ini tidak pernah tercatat di sale_payments sama sekali - jadi
+                // "Uang Masuk per Metode" dan rekonsiliasi laci selalu kurang sebesar itu.
+                //
+                // Yang dicatat nilai BERSIH: menyerahkan Rp 20.000 untuk selisih Rp 15.000
+                // menambah Rp 15.000 di laci, sisanya kembali ke pembeli. Aturan yang sama
+                // dengan KasirController - jangan dibuat berbeda.
+                //
+                // METODENYA DIMINTA, BUKAN DITEBAK dari transaksi aslinya. Pelanggan yang
+                // dulu bayar tunai bisa menambah lewat QRIS; menebaknya mengulang persis
+                // cacat yang diperbaiki di payWaiting (B-024 era). Kalau tidak dikirim,
+                // barulah jatuh ke cara transaksi aslinya - dan itu tertulis, bukan diam.
+                $netPayment = min($data['additional_payment'] ?? 0, $requiredPayment);
+
+                if ($netPayment > 0) {
+                    SalePayment::create([
+                        'sale_id' => $sale->id,
+                        'method' => MetodeBayar::normal(
+                            $data['additional_payment_method'] ?? $sale->payment_method
+                        ),
+                        'amount' => $netPayment,
+                        'kind' => 'bayar',
+                        'user_id' => $request->user()->id,
+                    ]);
+                }
             }
 
             $sale->save();

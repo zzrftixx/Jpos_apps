@@ -106,6 +106,14 @@
                         <div class="mt-2">
                             <label class="form-label">Jumlah Bayar Selisih</label>
                             <input type="text" data-jpos-number data-number-decimals="2" x-number="additionalPayment" :placeholder="'Minimal ' + formatNumber(addTotal())" class="form-input">
+                            {{-- Metode DIMINTA, bukan ditebak dari transaksi aslinya. Pelanggan
+                                 yang dulu bayar tunai bisa menambah lewat QRIS; menebaknya
+                                 menaruh uang di ember yang salah saat rekonsiliasi laci. --}}
+                            <select x-model="additionalPaymentMethod" class="form-select mt-2">
+                                @foreach(\App\Support\MetodeBayar::DAFTAR as $kunci => $labelMetode)
+                                    <option value="{{ $kunci }}">{{ $labelMetode }}</option>
+                                @endforeach
+                            </select>
                         </div>
                     </template>
 
@@ -177,6 +185,7 @@ function returApp() {
         productSearch: '',
         addItems: [],
         additionalPayment: 0,
+        additionalPaymentMethod: 'tunai',
         errorMsg: '',
         processing: false,
         viewMode: '{{ $defaultView }}',
@@ -250,6 +259,7 @@ function returApp() {
             this.sale = null;
             this.addItems = [];
             this.additionalPayment = 0;
+            this.additionalPaymentMethod = 'tunai';
             if (!this.invoiceNo) return;
             const res = await fetch(`{{ route('retur.find') }}?invoice_no=${encodeURIComponent(this.invoiceNo)}`);
             const data = await res.json();
@@ -288,6 +298,7 @@ function returApp() {
                         items,
                         add_items: addItemsPayload,
                         additional_payment: this.additionalPayment || 0,
+                        additional_payment_method: this.additionalPaymentMethod,
                     }),
                 });
                 const data = await res.json();
