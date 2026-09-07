@@ -66,27 +66,24 @@
 @php
     $nLunas  = $rincianStatus['completed'] ?? null;
     $nTunggu = $rincianStatus['waiting'] ?? null;
-    $nBatal  = $rincianStatus['cancelled'] ?? null;
     $vLunas  = (float) ($nLunas->nilai ?? 0);
     $vTunggu = (float) ($nTunggu->nilai ?? 0);
-    $vBatal  = (float) ($nBatal->nilai ?? 0);
 @endphp
 <div class="card p-4 mb-4">
     <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
         <h2 class="font-semibold">Rincian Seluruh Transaksi</h2>
         <span class="text-sm text-slate-500 tabular-nums">
-            Jumlah semuanya Rp {{ number_format($vLunas + $vTunggu + $vBatal, 0, ',', '.') }}
+            Jumlah semuanya Rp {{ number_format($vLunas + $vTunggu, 0, ',', '.') }}
         </span>
     </div>
 
     <p class="text-xs text-slate-500 mb-3">
         Dari jumlah di atas, <strong>hanya yang lunas</strong> yang dihitung sebagai omset.
-        Pesanan yang belum lunas masih berupa piutang, dan transaksi yang dibatalkan uangnya
-        tidak pernah masuk. Aplikasi versi lama menjumlahkan ketiganya jadi satu &mdash;
+        Pesanan yang belum lunas masih berupa piutang. Aplikasi versi lama menjumlahkan keduanya jadi satu &mdash;
         itulah kenapa angkanya dulu terlihat jauh lebih besar.
     </p>
 
-    <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <div class="border rounded-lg px-3 py-2 bg-green-100 text-green-700 border-green-200">
             <div class="text-xs">Penjualan Lunas &middot; {{ $nLunas->jumlah ?? 0 }} transaksi</div>
             <div class="font-bold tabular-nums">Rp {{ number_format($vLunas, 0, ',', '.') }}</div>
@@ -97,14 +94,9 @@
             <div class="font-bold tabular-nums">Rp {{ number_format($vTunggu, 0, ',', '.') }}</div>
             <div class="text-xs">piutang, belum jadi omset</div>
         </div>
-        <div class="border rounded-lg px-3 py-2 bg-red-100 text-red-700 border-red-200">
-            <div class="text-xs">Dibatalkan &middot; {{ $nBatal->jumlah ?? 0 }} transaksi</div>
-            <div class="font-bold tabular-nums">Rp {{ number_format($vBatal, 0, ',', '.') }}</div>
-            <div class="text-xs">uangnya tidak pernah masuk</div>
-        </div>
         <div class="border rounded-lg px-3 py-2 bg-slate-100 text-slate-700 border-slate-200">
-            <div class="text-xs">Kalau ketiganya dijumlahkan</div>
-            <div class="font-bold tabular-nums">Rp {{ number_format($vLunas + $vTunggu + $vBatal, 0, ',', '.') }}</div>
+            <div class="text-xs">Kalau keduanya dijumlahkan</div>
+            <div class="font-bold tabular-nums">Rp {{ number_format($vLunas + $vTunggu, 0, ',', '.') }}</div>
             <div class="text-xs">cara hitung versi lama</div>
         </div>
     </div>

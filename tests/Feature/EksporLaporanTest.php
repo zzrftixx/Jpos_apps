@@ -374,11 +374,10 @@ class EksporLaporanTest extends JposTestCase
         $this->assertStringContainsString('Rincian Seluruh Transaksi', $teks);
         $this->assertStringContainsString('JUMLAH SEMUANYA', $teks);
         $this->assertStringContainsString('piutang, belum jadi omset', $teks);
-        $this->assertStringContainsString('uangnya tidak pernah masuk', $teks);
 
         // Yang paling menentukan: totalnya dihitungkan, bukan dibiarkan ke kalkulator.
-        $this->assertStringContainsString('Rp 6.000.000', $teks,
-            'Jumlah ketiga status tidak dihitungkan di berkas unduhan.');
+        $this->assertStringContainsString('Rp 3.000.000', $teks,
+            'Jumlah kedua status (lunas & tunggu) tidak dihitungkan di berkas unduhan.');
     }
 
     /** Status karangan di alamat diabaikan, bukan diteruskan mentah ke query. */

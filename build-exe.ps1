@@ -382,7 +382,7 @@ Tahap 6 "Memasang dependensi produksi ke dalam paket"
 # path RELATIF di dalam classmap, dihitung dari lokasi vendor saat autoloader dibuat.
 # Begitu vendor dipindahkan, seluruh path itu menunjuk ke luar folder aplikasi dan
 # Laravel gagal memuat AppServiceProvider - instalasi baru mati sebelum sempat menyala.
-& composer install --working-dir="$TargetDir" --no-dev --optimize-autoloader --classmap-authoritative --no-interaction --quiet
+& composer install --working-dir="$TargetDir" --no-dev --optimize-autoloader --classmap-authoritative --no-interaction
 if ($LASTEXITCODE -ne 0) { Gagal "composer install --no-dev gagal." }
 if (-not (Test-Path (Join-Path $TargetDir "vendor\autoload.php"))) { Gagal "vendor tidak terbentuk di dalam paket." }
 

@@ -216,6 +216,7 @@ class LaporanEksporController extends Controller
         $perStatus = Sale::whereDate('created_at', '>=', $dari)
             ->whereDate('created_at', '<=', $sampai)
             ->when($status, fn ($q) => $q->where('order_status', $status))
+            ->where('order_status', '<>', 'cancelled')
             ->selectRaw('order_status, COUNT(*) as jumlah, SUM(total) as nilai')
             ->groupBy('order_status')
             ->get()
@@ -226,7 +227,6 @@ class LaporanEksporController extends Controller
                 'catatan' => match ($r->order_status) {
                     'completed' => 'dihitung sebagai omset',
                     'waiting' => 'piutang, belum jadi omset',
-                    'cancelled' => 'uangnya tidak pernah masuk',
                     default => '-',
                 },
             ]);
@@ -297,7 +297,7 @@ class LaporanEksporController extends Controller
                 'Pesanan berstatus Menunggu dan Batal ikut ditampilkan supaya seluruh transaksi bisa ditelusuri, tapi keduanya tidak dihitung sebagai omset.',
                 'Uang Masuk per Metode menghitung uang yang BENAR-BENAR diterima pada rentang tanggal ini, jadi jumlahnya sengaja tidak sama dengan jumlah kolom Total. DP yang diterima bulan ini untuk pesanan yang selesai bulan depan sudah masuk di sini tapi belum jadi omset; sebaliknya pesanan yang selesai bulan ini tapi DP-nya diterima bulan lalu hanya tercatat sebesar pelunasannya. Inilah angka yang diadu dengan isi laci dan mutasi rekening.',
                 'Transaksi yang dibatalkan tidak dihitung sebagai uang masuk karena uangnya sudah dikembalikan ke pembeli.',
-                'Pada Rincian Seluruh Transaksi, JUMLAH SEMUANYA adalah penjumlahan ketiga status - dan itulah cara aplikasi versi lama menghitung omset, sehingga angkanya dulu terlihat jauh lebih besar. Yang benar-benar omset hanya baris berstatus Selesai.',
+                'Pada Rincian Seluruh Transaksi, JUMLAH SEMUANYA adalah penjumlahan keduanya (Lunas dan Belum Lunas) - dan itulah cara aplikasi versi lama menghitung omset, sehingga angkanya dulu terlihat jauh lebih besar. Yang benar-benar omset hanya baris berstatus Selesai.',
             );
     }
 
