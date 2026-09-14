@@ -185,6 +185,8 @@ class ProductController extends Controller
         $unitsInput = $data['units'] ?? [];
         unset($data['units']);
 
+        $initialStock = $request->input('initial_stock');
+
         if ($request->hasFile('image')) {
             if ($product->image) {
                 Storage::disk('public')->delete($product->image);
@@ -192,11 +194,21 @@ class ProductController extends Controller
             $data['image'] = $this->saveOptimizedImage($request->file('image'), 'products');
         }
 
-        DB::transaction(function () use ($data, $unitsInput, $product, $request) {
+        DB::transaction(function () use ($data, $unitsInput, $product, $request, $initialStock) {
             // Dikunci & dibaca ulang di dalam transaksi untuk mencegah penghapusan stok 
             // secara diam-diam (stale read) jika ada penjualan saat form sedang terbuka.
             $product = Product::lockForUpdate()->find($product->id);
             $oldStock = $product->stock;
+
+            // Jika form edit mengirim initial_stock dan pengguna TIDAK mengubah stok di form,
+            // jangan timpa stok database yang mungkin baru saja dipotong oleh kasir (stale read).
+            if ($initialStock !== null && $initialStock !== '') {
+                $formStokBerubah = (Angka::bulat((float) $data['stock'] - (float) $initialStock) != 0);
+                if (! $formStokBerubah) {
+                    // Pengguna tidak menyentuh stok (hanya ubah harga/nama/dsb). Pertahankan stok aktual di database.
+                    $data['stock'] = $oldStock;
+                }
+            }
 
             $product->update($data);
             $this->syncUnits($product, $unitsInput);
@@ -458,6 +470,7 @@ class ProductController extends Controller
             // numeric, bukan integer: stok barang timbangan wajar bernilai pecahan
             // (mis. sisa 9,6 Kg setelah menjual 400 Gram).
             'stock' => ['required_if:type,barang', 'nullable', 'numeric', 'min:0'],
+            'initial_stock' => ['nullable', 'numeric'],
             'min_stock' => ['nullable', 'numeric', 'min:0'],
             'is_active' => ['nullable', 'boolean'],
             'is_taxable' => ['nullable', 'boolean'],

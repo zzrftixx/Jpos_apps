@@ -657,6 +657,7 @@
                         </div>
                         {{-- Yang dikirim ke server SELALU dalam satuan dasar. --}}
                         <input type="hidden" name="stock" :value="stockBase">
+                        <input type="hidden" name="initial_stock" :value="editItem ? editItem.stock : null">
                         <p class="text-[11px] text-slate-400 mt-1" x-show="stockUnit !== 'base'">= <span x-text="qty(stockBase)"></span> <span x-text="unit"></span></p>
                     </div>
                     <div>
