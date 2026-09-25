@@ -82,14 +82,13 @@ class DashboardController extends Controller
         // `qty * unit_conversion` supaya satuannya sebanding: menjual 1 Dus berisi 24 dan
         // menjual 24 Pcs adalah jumlah barang yang sama, dan tanpa konversi yang pertama
         // terhitung "1" sehingga peringkatnya jadi menyesatkan.
-        $topProducts = SaleItem::select('product_name')
-            ->selectRaw('SUM(qty * unit_conversion) as total_qty')
-            ->whereHas('sale', function ($q) {
-                $q->whereMonth('created_at', now()->month)
-                    ->whereYear('created_at', now()->year)
-                    ->where('order_status', 'completed');
-            })
-            ->groupBy('product_name')
+        $topProducts = SaleItem::join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->select('sale_items.product_name')
+            ->selectRaw('SUM(sale_items.qty * sale_items.unit_conversion) as total_qty')
+            ->whereMonth('sales.created_at', now()->month)
+            ->whereYear('sales.created_at', now()->year)
+            ->where('sales.order_status', 'completed')
+            ->groupBy('sale_items.product_name')
             ->orderByDesc('total_qty')
             ->limit(5)
             ->get();
