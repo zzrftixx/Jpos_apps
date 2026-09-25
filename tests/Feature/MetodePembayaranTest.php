@@ -341,9 +341,10 @@ class MetodePembayaranTest extends JposTestCase
         $this->assertStringContainsString('Rp 2.000.000', $html, 'Nilai pesanan belum lunas tidak tampil.');
         $this->assertStringContainsString('Rp 3.000.000', $html, 'Nilai transaksi batal tidak tampil.');
 
-        // Yang paling menentukan: jumlah ketiganya dihitungkan, bukan dibiarkan ke kalkulator.
-        $this->assertStringContainsString('Rp 6.000.000', $html,
-            'Jumlah ketiga status tidak dihitungkan - pemilik toko masih harus pakai kalkulator.');
+        // Mengikuti [U-038] di 2.11.5: kotak Dibatalkan dihilangkan dari rincian dan
+        // jumlahnya adalah penjumlahan kedua status (Lunas & Belum Lunas = 3.000.000).
+        $this->assertStringContainsString('Rp 3.000.000', $html,
+            'Jumlah kedua status (lunas & tunggu) tidak dihitungkan - pemilik toko masih harus pakai kalkulator.');
     }
 
     /** Omset resmi TIDAK ikut berubah oleh rincian baru itu - ia tetap hanya yang lunas. */
