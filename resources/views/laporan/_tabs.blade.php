@@ -1,6 +1,7 @@
 @php
     $laporanTabs = [
         'laporan.penjualan' => 'Penjualan',
+        'laporan.shift' => 'Transaksi per Shift',
         'laporan.omset' => 'Omset',
         'laporan.laba' => 'Keuangan Laba',
         'laporan.neraca' => 'Neraca',

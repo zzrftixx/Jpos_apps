@@ -132,6 +132,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/', [PurchaseController::class, 'index'])->name('index');
         Route::post('/', [PurchaseController::class, 'store'])->name('store');
         Route::post('/{purchase}/bayar', [PurchaseController::class, 'bayar'])->name('bayar');
+        Route::get('/{purchase}/cetak', [PurchaseController::class, 'cetak'])->name('cetak');
         Route::delete('/{purchase}', [PurchaseController::class, 'destroy'])->name('destroy');
     });
 
@@ -150,6 +151,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/stok', [ReportController::class, 'stok'])->name('stok');
         Route::get('/stok/{product}', [ReportController::class, 'stokMovements'])->name('stok.detail');
         Route::get('/terlaris', [ReportController::class, 'terlaris'])->name('terlaris');
+        Route::get('/shift', [ReportController::class, 'shift'])->name('shift');
 
         Route::get('/neraca', [ReportController::class, 'neraca'])->name('neraca');
         Route::post('/neraca/pembukuan', [ReportController::class, 'simpanPembukuan'])->name('neraca.pembukuan');

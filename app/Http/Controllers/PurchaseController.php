@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
 use App\Models\PurchasePayment;
+use App\Models\Setting;
 use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Support\Angka;
@@ -349,5 +350,16 @@ class PurchaseController extends Controller
             'note' => $catatan . ($purchase->supplier ? ' - ' . $purchase->supplier->name : ''),
             'user_id' => $userId,
         ]);
+    }
+
+    public function cetak(Purchase $purchase)
+    {
+        $purchase->load(['supplier', 'items.product', 'payments.user', 'user']);
+        $storeProfile = Setting::get('store_profile', [
+            'name' => config('app.name', 'JPOS'),
+            'address' => '',
+            'phone' => '',
+        ]);
+        return view('transaksi.pembelian.cetak', compact('purchase', 'storeProfile'));
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CashierShift;
 use App\Models\CashTransaction;
 use App\Models\FixedAsset;
 use App\Models\NeracaSnapshot;
@@ -11,6 +12,7 @@ use App\Models\SaleItem;
 use App\Models\SalePayment;
 use App\Models\Setting;
 use App\Models\StockMovement;
+use App\Models\User;
 use App\Support\Akuntansi;
 use App\Support\Angka;
 use App\Support\MetodeBayar;
@@ -89,6 +91,104 @@ class ReportController extends Controller
         return view('laporan.penjualan', compact(
             'sales', 'summary', 'from', 'to', 'metode', 'uangMasuk', 'rincianStatus'
         ));
+    }
+
+    /**
+     * Laporan Transaksi per Shift Kasir.
+     *
+     * Menampilkan rekapitulasi sesi kasir lengkap dengan ringkasan transaksi
+     * yang terjadi di dalam masing-masing sesi shift tersebut.
+     */
+    public function shift(Request $request)
+    {
+        $from = $request->from ?: now()->startOfMonth()->toDateString();
+        $to = $request->to ?: now()->toDateString();
+        $userId = $request->user_id ? (int) $request->user_id : null;
+        $shiftId = $request->shift_id ? (int) $request->shift_id : null;
+        $status = in_array($request->status, ['open', 'closed'], true) ? $request->status : null;
+
+        // Query shift dengan eager loading relasi kasir dan penjualan beserta items (kecuali transaksi dibatalkan)
+        $shiftsQuery = CashierShift::with([
+            'user',
+            'sales' => function ($q) {
+                $q->where('order_status', '<>', 'cancelled')
+                    ->with(['customer', 'cashier', 'payments', 'items'])
+                    ->orderByDesc('created_at');
+            },
+        ])
+            ->whereDate('opened_at', '>=', $from)
+            ->whereDate('opened_at', '<=', $to)
+            ->when($userId, fn($q) => $q->where('user_id', $userId))
+            ->when($shiftId, fn($q) => $q->where('id', $shiftId))
+            ->when($status, fn($q) => $q->where('status', $status))
+            ->orderByDesc('opened_at');
+
+        $shifts = $shiftsQuery->paginate(10)->withQueryString();
+        $shifts->getCollection()->transform(function ($s) {
+            $s->calculated = $s->calculateSummary();
+            return $s;
+        });
+
+        // Ambil seluruh matching shift untuk kartu metrik ringkasan & tabel rekapitulasi
+        $allMatchingShifts = CashierShift::with('user')
+            ->whereDate('opened_at', '>=', $from)
+            ->whereDate('opened_at', '<=', $to)
+            ->when($userId, fn($q) => $q->where('user_id', $userId))
+            ->when($shiftId, fn($q) => $q->where('id', $shiftId))
+            ->when($status, fn($q) => $q->where('status', $status))
+            ->orderByDesc('opened_at')
+            ->get()
+            ->map(function ($s) {
+                $s->calculated = $s->calculateSummary();
+                return $s;
+            });
+
+        $matchingShiftIds = $allMatchingShifts->pluck('id')->all();
+
+        $salesMetrics = Sale::query()
+            ->whereIn('cashier_shift_id', $matchingShiftIds)
+            ->where('order_status', '<>', 'cancelled')
+            ->selectRaw('COUNT(*) as total_trx, SUM(total) as total_nominal, SUM(discount) as total_discount, SUM(tax_amount) as total_tax')
+            ->first();
+
+        // Hitung uang masuk tunai dan non-tunai dari pembayaran transaksi shift
+        $pembayaranShift = SalePayment::query()
+            ->join('sales', 'sales.id', '=', 'sale_payments.sale_id')
+            ->whereIn('sales.cashier_shift_id', $matchingShiftIds)
+            ->where('sales.order_status', '<>', 'cancelled')
+            ->selectRaw('sale_payments.method, SUM(sale_payments.amount) as nilai')
+            ->groupBy('sale_payments.method')
+            ->pluck('nilai', 'method');
+
+        $totalCash = (float) ($pembayaranShift['tunai'] ?? 0);
+        $totalNonCash = (float) (collect($pembayaranShift)->except('tunai')->sum());
+        $totalShiftSales = (float) ($salesMetrics->total_nominal ?? 0);
+        $totalSelisih = (float) $allMatchingShifts->where('status', 'closed')->sum('difference');
+
+        $summary = (object) [
+            'shift_count' => $allMatchingShifts->count(),
+            'closed_shift_count' => $allMatchingShifts->where('status', 'closed')->count(),
+            'open_shift_count' => $allMatchingShifts->where('status', 'open')->count(),
+            'total_sales' => Angka::bulat($totalShiftSales),
+            'total_cash' => Angka::bulat($totalCash),
+            'total_non_cash' => Angka::bulat($totalNonCash),
+            'total_trx' => (int) ($salesMetrics->total_trx ?? 0),
+            'total_difference' => Angka::bulat($totalSelisih),
+        ];
+
+        $users = User::orderBy('name')->get();
+
+        // Opsi daftar shift untuk dropdown
+        $daftarShift = CashierShift::with('user')
+            ->whereDate('opened_at', '>=', $from)
+            ->whereDate('opened_at', '<=', $to)
+            ->when($userId, fn($q) => $q->where('user_id', $userId))
+            ->orderByDesc('opened_at')
+            ->get();
+
+        $rekapShifts = $allMatchingShifts;
+
+        return view('laporan.shift', compact('shifts', 'rekapShifts', 'summary', 'users', 'daftarShift', 'from', 'to', 'userId', 'shiftId', 'status'));
     }
 
     public function stok(Request $request)

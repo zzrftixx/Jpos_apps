@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CashierShift;
 use App\Models\CashTransaction;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SalePayment;
+use App\Models\User;
 use App\Support\Akuntansi;
 use App\Support\Angka;
 use App\Support\EksporLaporan;
@@ -660,6 +662,199 @@ class LaporanEksporController extends Controller
                 'Uang muka yang sudah diterima justru dicatat sebagai KEWAJIBAN di Neraca - toko masih berhutang barang kepada pembelinya.',
                 'Stok barang pesanan sudah dipotong supaya tidak terjual dua kali, tapi nilainya tetap dihitung sebagai persediaan.',
             );
+    }
+
+    /* ==================================================================== SHIFT KASIR */
+
+    private function laporanShift(Request $request): Laporan
+    {
+        [$dari, $sampai] = $this->rentang($request);
+        $userId = $request->user_id ? (int) $request->user_id : null;
+        $shiftId = $request->shift_id ? (int) $request->shift_id : null;
+        $status = in_array($request->status, ['open', 'closed'], true) ? $request->status : null;
+
+        // Ambil data shift dengan relasi user dan transaksi beserta item produk (kecuali yang dibatalkan)
+        $shifts = CashierShift::with([
+            'user',
+            'sales' => function ($q) {
+                $q->where('order_status', '<>', 'cancelled')
+                    ->with(['customer', 'cashier', 'payments', 'items'])
+                    ->orderBy('created_at');
+            },
+        ])
+            ->whereDate('opened_at', '>=', $dari)
+            ->whereDate('opened_at', '<=', $sampai)
+            ->when($userId, fn($q) => $q->where('user_id', $userId))
+            ->when($shiftId, fn($q) => $q->where('id', $shiftId))
+            ->when($status, fn($q) => $q->where('status', $status))
+            ->orderBy('opened_at')
+            ->get();
+
+        // 1. Baris Rekapitulasi Shift
+        $barisShift = $shifts->map(function (CashierShift $s) {
+            $isClosed = $s->status === 'closed';
+            $diff = (float) ($s->difference ?? 0);
+            $durasi = $s->closed_at
+                ? ($s->opened_at->diffInHours($s->closed_at) . ' jam ' . ($s->opened_at->diffInMinutes($s->closed_at) % 60) . ' mnt')
+                : 'Aktif';
+
+            $selisihLabel = '-';
+            if ($isClosed) {
+                if (abs($diff) < 0.01) {
+                    $selisihLabel = 'PAS (Rp 0)';
+                } elseif ($diff > 0) {
+                    $selisihLabel = '+Rp ' . number_format($diff, 0, ',', '.');
+                } else {
+                    $selisihLabel = '-Rp ' . number_format(abs($diff), 0, ',', '.');
+                }
+            }
+
+            return [
+                'shift_id' => '#' . $s->id,
+                'kasir' => $s->user->name ?? 'Kasir #' . $s->user_id,
+                'buka' => $s->opened_at->format('d/m/Y H:i'),
+                'tutup' => $s->closed_at ? $s->closed_at->format('d/m/Y H:i') : 'Masih Berjalan',
+                'durasi' => $durasi,
+                'status' => $s->status === 'open' ? 'Aktif' : 'Selesai',
+                'modal_awal' => (float) $s->starting_cash,
+                'penjualan_tunai' => (float) $s->cash_sales,
+                'penjualan_non_tunai' => (float) $s->non_cash_sales,
+                'total_penjualan' => (float) ($s->cash_sales + $s->non_cash_sales),
+                'fisik_laci' => $s->actual_cash !== null ? (float) $s->actual_cash : 0.0,
+                'selisih' => $selisihLabel,
+            ];
+        });
+
+        // 2. Baris Rincian Seluruh Transaksi per Shift & 3. Baris Rincian Produk
+        $barisTransaksi = collect();
+        $barisProduk = collect();
+        foreach ($shifts as $s) {
+            foreach ($s->sales as $sale) {
+                $metodes = $sale->payments->isEmpty()
+                    ? MetodeBayar::label($sale->payment_method)
+                    : $sale->payments->map(fn($p) => MetodeBayar::label($p->method))->unique()->implode(', ');
+
+                $barisTransaksi->push([
+                    'shift' => '#' . $s->id,
+                    'kasir' => $s->user->name ?? '-',
+                    'waktu' => $sale->created_at->format('d/m/Y H:i'),
+                    'invoice' => $sale->invoice_no,
+                    'pelanggan' => $sale->customer->name ?? 'Umum',
+                    'metode' => $metodes,
+                    'status' => $this->labelStatus($sale->order_status),
+                    'diskon' => (float) $sale->discount,
+                    'pajak' => (float) $sale->tax_amount,
+                    'total' => (float) $sale->total,
+                ]);
+
+                foreach ($sale->items as $item) {
+                    $barisProduk->push([
+                        'shift' => '#' . $s->id,
+                        'kasir' => $s->user->name ?? '-',
+                        'invoice' => $sale->invoice_no,
+                        'produk' => $item->product_name,
+                        'qty' => (float) $item->qty,
+                        'satuan' => $item->unit_label ?? 'Pcs',
+                        'harga' => (float) $item->price,
+                        'subtotal' => (float) $item->subtotal,
+                    ]);
+                }
+            }
+        }
+
+        // Ringkasan
+        $totalPenjualanTrx = (float) $barisTransaksi->sum('total');
+        $totalTunai = (float) $shifts->sum('cash_sales');
+        $totalNonTunai = (float) $shifts->sum('non_cash_sales');
+        $totalSelisih = (float) $shifts->where('status', 'closed')->sum('difference');
+
+        $ringkasan = [
+            'Total Shift' => $shifts->count() . ' shift (' . $shifts->where('status', 'closed')->count() . ' selesai, ' . $shifts->where('status', 'open')->count() . ' aktif)',
+            'Total Transaksi Penjualan' => $barisTransaksi->count() . ' transaksi',
+            'Total Nilai Penjualan' => Laporan::format($totalPenjualanTrx, 'rupiah'),
+            'Penjualan Tunai' => Laporan::format($totalTunai, 'rupiah'),
+            'Penjualan Non-Tunai' => Laporan::format($totalNonTunai, 'rupiah'),
+            'Total Selisih Kas Laci' => (abs($totalSelisih) < 0.01 ? 'Rp 0 (Pas)' : (($totalSelisih > 0 ? '+' : '-') . Laporan::format(abs($totalSelisih), 'rupiah'))),
+        ];
+
+        if ($userId) {
+            $kasirUser = User::find($userId);
+            if ($kasirUser) {
+                $ringkasan['Filter Kasir'] = $kasirUser->name;
+            }
+        }
+
+        if ($shiftId) {
+            $ringkasan['Filter Shift'] = '#' . $shiftId;
+        }
+
+        if ($status) {
+            $ringkasan['Filter Status Shift'] = $status === 'open' ? 'Open (Aktif)' : 'Closed (Selesai)';
+        }
+
+        return Laporan::buat('Laporan Transaksi per Shift', 'laporan-transaksi-shift')
+            ->periode($dari, $sampai)
+            ->ringkasan($ringkasan)
+            ->bagian('Rekapitulasi Shift Kasir', [
+                ['label' => 'Shift', 'key' => 'shift_id', 'lebar' => 10],
+                ['label' => 'Kasir', 'key' => 'kasir', 'lebar' => 20],
+                ['label' => 'Waktu Buka', 'key' => 'buka', 'lebar' => 18],
+                ['label' => 'Waktu Tutup', 'key' => 'tutup', 'lebar' => 18],
+                ['label' => 'Status', 'key' => 'status', 'lebar' => 12],
+                ['label' => 'Modal Awal', 'key' => 'modal_awal', 'format' => 'rupiah'],
+                ['label' => 'Tunai', 'key' => 'penjualan_tunai', 'format' => 'rupiah'],
+                ['label' => 'Non-Tunai', 'key' => 'penjualan_non_tunai', 'format' => 'rupiah'],
+                ['label' => 'Total Penjualan', 'key' => 'total_penjualan', 'format' => 'rupiah'],
+                ['label' => 'Fisik Laci', 'key' => 'fisik_laci', 'format' => 'rupiah'],
+                ['label' => 'Selisih', 'key' => 'selisih', 'lebar' => 16],
+            ], $barisShift->all(), [
+                'shift_id' => 'TOTAL',
+                'modal_awal' => $barisShift->sum('modal_awal'),
+                'penjualan_tunai' => $barisShift->sum('penjualan_tunai'),
+                'penjualan_non_tunai' => $barisShift->sum('penjualan_non_tunai'),
+                'total_penjualan' => $barisShift->sum('total_penjualan'),
+                'fisik_laci' => $barisShift->sum('fisik_laci'),
+            ])
+            ->bagian('Rincian Transaksi per Shift', [
+                ['label' => 'Shift', 'key' => 'shift', 'lebar' => 10],
+                ['label' => 'Kasir', 'key' => 'kasir', 'lebar' => 18],
+                ['label' => 'Waktu', 'key' => 'waktu', 'lebar' => 18],
+                ['label' => 'No. Invoice', 'key' => 'invoice', 'lebar' => 18],
+                ['label' => 'Pelanggan', 'key' => 'pelanggan', 'lebar' => 22],
+                ['label' => 'Metode Bayar', 'key' => 'metode', 'lebar' => 16],
+                ['label' => 'Status', 'key' => 'status', 'lebar' => 14],
+                ['label' => 'Diskon', 'key' => 'diskon', 'format' => 'rupiah'],
+                ['label' => 'Pajak', 'key' => 'pajak', 'format' => 'rupiah'],
+                ['label' => 'Total', 'key' => 'total', 'format' => 'rupiah'],
+            ], $barisTransaksi->all(), [
+                'shift' => 'TOTAL',
+                'diskon' => $barisTransaksi->sum('diskon'),
+                'pajak' => $barisTransaksi->sum('pajak'),
+                'total' => $barisTransaksi->sum('total'),
+            ])
+            ->bagian('Rincian Item Produk Terjual per Shift', [
+                ['label' => 'Shift', 'key' => 'shift', 'lebar' => 10],
+                ['label' => 'Kasir', 'key' => 'kasir', 'lebar' => 18],
+                ['label' => 'No. Invoice', 'key' => 'invoice', 'lebar' => 18],
+                ['label' => 'Nama Produk / Barang', 'key' => 'produk', 'lebar' => 28],
+                ['label' => 'Qty', 'key' => 'qty', 'align' => 'center'],
+                ['label' => 'Satuan', 'key' => 'satuan', 'lebar' => 12],
+                ['label' => 'Harga Satuan', 'key' => 'harga', 'format' => 'rupiah'],
+                ['label' => 'Subtotal', 'key' => 'subtotal', 'format' => 'rupiah'],
+            ], $barisProduk->all(), [
+                'shift' => 'TOTAL',
+                'qty' => $barisProduk->sum('qty'),
+                'subtotal' => $barisProduk->sum('subtotal'),
+            ])
+            ->catatan(
+                'Transaksi yang dibatalkan tidak dimasukkan ke dalam laporan transaksi shift dan tidak dihitung ke dalam total.',
+                'Selisih kas laci dihitung dari uang fisik laci dikurangi estimasi kas sistem saat penutupan shift.',
+            );
+    }
+
+    private function laporanTransaksiShift(Request $request): Laporan
+    {
+        return $this->laporanShift($request);
     }
 
     private function labelStatus(string $status): string

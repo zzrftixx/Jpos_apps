@@ -285,4 +285,17 @@ class PembelianTest extends JposTestCase
     {
         $this->actingAs($this->kasir)->get('/pembelian')->assertForbidden();
     }
+
+    public function test_faktur_pembelian_dapat_dicetak(): void
+    {
+        $produk = $this->makeProduct(['stock' => 0]);
+        $this->beli($produk)->assertSessionHasNoErrors();
+
+        $purchase = Purchase::firstOrFail();
+        $response = $this->actingAs($this->admin)->get("/pembelian/{$purchase->id}/cetak");
+
+        $response->assertOk();
+        $response->assertSee($purchase->invoice_number);
+        $response->assertSee($produk->name);
+    }
 }
