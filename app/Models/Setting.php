@@ -8,18 +8,39 @@ class Setting extends Model
 {
     protected $fillable = ['key', 'value'];
 
+    /** Cache in-memory per siklus permintaan (request) untuk mencegah N+1 pembacaan settings (B1). */
+    protected static array $memo = [];
+
     public static function get(string $key, $default = null)
     {
+        if (array_key_exists($key, self::$memo)) {
+            return self::$memo[$key];
+        }
+
         $row = self::where('key', $key)->first();
-        if (!$row) return $default;
+        if (!$row) {
+            return self::$memo[$key] = $default;
+        }
+
         $decoded = json_decode($row->value, true);
-        return json_last_error() === JSON_ERROR_NONE ? $decoded : $row->value;
+        return self::$memo[$key] = (json_last_error() === JSON_ERROR_NONE ? $decoded : $row->value);
     }
 
     public static function set(string $key, $value): void
     {
         $stored = is_array($value) ? json_encode($value) : $value;
         self::updateOrCreate(['key' => $key], ['value' => $stored]);
+        self::$memo[$key] = is_array($value) ? $value : $stored;
+    }
+
+    public static function flushMemo(): void
+    {
+        self::$memo = [];
+    }
+
+    public static function forget(string $key): void
+    {
+        unset(self::$memo[$key]);
     }
 
     /**
@@ -51,5 +72,59 @@ class Setting extends Model
         $mode = $setting['mode'] ?? 'sederhana';
 
         return in_array($mode, ['sederhana', 'lengkap']) ? $mode : 'sederhana';
+    }
+
+    /**
+     * Pengaturan fitur Shift Kasir (aktif / nonaktif, kas laci, waktu shift, dan aturan operasional).
+     */
+    public static function shiftKasir(): array
+    {
+        $default = [
+            'enabled' => true,
+            'require_shift_for_sales' => false,
+            'show_expected_cash_on_close' => true,
+            // Kas Laci (Modal Awal / Cash Float)
+            'default_starting_cash' => 0,
+            'starting_cash_mode' => 'fixed', // 'fixed', 'last_closing', atau 'disabled'
+            'require_positive_starting_cash' => false,
+            // Sistem Waktu Shift (Otomatis vs Manual)
+            'time_mode' => 'auto', // 'auto' atau 'manual'
+        ];
+        $setting = self::get('shift_kasir', $default);
+        if (!is_array($setting)) {
+            return $default;
+        }
+        return array_merge($default, $setting);
+    }
+
+    public static function shiftKasirEnabled(): bool
+    {
+        return (bool) (self::shiftKasir()['enabled'] ?? true);
+    }
+
+    /**
+     * Memeriksa apakah mode Kas Laci (modal awal & hitung fisik) aktif.
+     */
+    public static function cashDrawerEnabled(): bool
+    {
+        return (self::shiftKasir()['starting_cash_mode'] ?? 'fixed') !== 'disabled';
+    }
+
+    /**
+     * Menghitung nilai default modal kas laci berdasarkan pengaturan yang aktif.
+     */
+    public static function defaultStartingCash(): float
+    {
+        $settings = self::shiftKasir();
+        if (!self::cashDrawerEnabled()) {
+            return 0.0;
+        }
+        if (($settings['starting_cash_mode'] ?? 'fixed') === 'last_closing') {
+            $lastClosed = CashierShift::where('status', 'closed')->latest('closed_at')->first();
+            if ($lastClosed && $lastClosed->actual_cash !== null) {
+                return (float) $lastClosed->actual_cash;
+            }
+        }
+        return (float) ($settings['default_starting_cash'] ?? 0);
     }
 }

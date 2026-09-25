@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ResolvesUnitPricing;
+use App\Models\CashierShift;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Product;
@@ -17,6 +18,7 @@ use App\Support\Angka;
 use App\Support\MetodeBayar;
 use App\Support\ProductCatalog;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class KasirController extends Controller
@@ -39,11 +41,30 @@ class KasirController extends Controller
         $tax = Setting::get('tax', ['enabled' => false, 'percent' => 0, 'include_in_price' => false]);
         ['view' => $defaultView, 'toggle' => $allowToggle] = Setting::kasirDisplayMode();
 
+        // Kategori Terlaris: 30 produk dengan akumulasi penjualan tertinggi dari transaksi completed
+        $topProductIds = Cache::remember('jpos:top_product_ids', 300, function () {
+            return DB::table('sale_items')
+                ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+                ->where('sales.order_status', 'completed')
+                ->whereNotNull('sale_items.product_id')
+                ->groupBy('sale_items.product_id')
+                ->select('sale_items.product_id')
+                ->selectRaw('SUM(sale_items.qty * sale_items.unit_conversion) as total_qty')
+                ->orderByDesc('total_qty')
+                ->limit(30)
+                ->pluck('product_id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+        });
+
         // Keranjang yang baru diambil dari tahanan, dititipkan lewat sesi oleh ambilTahan().
         // Lewat sesi, bukan lewat URL: isi keranjang bisa panjang, dan URL yang memuat
         // seluruh belanjaan pelanggan akan tersimpan di riwayat peramban komputer kasir.
         $keranjangDiambil = session('kasir_keranjang_diambil');
+        $customerDiambil = session('kasir_customer_id');
+        $discountDiambil = session('kasir_discount');
         $jumlahTertahan = Sale::tertahan()->count();
+        $jumlahPesanan = Sale::pesanan()->count();
 
         // Pilihan dokumen cetak (Struk / Invoice / Keduanya). Dibaca di sini, bukan di
         // dalam Blade, supaya halaman kasir tidak menambah query saat sedang melayani.
@@ -59,21 +80,55 @@ class KasirController extends Controller
             ? $templateStruk['dokumen_default']
             : 'struk';
 
+        $shiftKasirSettings = Setting::shiftKasir();
+        $shiftKasirEnabled = (bool) ($shiftKasirSettings['enabled'] ?? true);
+        $cashDrawerEnabled = Setting::cashDrawerEnabled();
+        $activeShift = $shiftKasirEnabled ? CashierShift::getActiveShift($request->user()->id) : null;
+        $defaultStartingCash = Setting::defaultStartingCash();
+
         return view('transaksi.kasir.index', compact(
             'categories', 'customers', 'tax', 'productsForCart', 'defaultView', 'allowToggle',
-            'keranjangDiambil', 'jumlahTertahan', 'pilihDokumen', 'dokumenDefault'
+            'keranjangDiambil', 'customerDiambil', 'discountDiambil', 'jumlahTertahan', 'jumlahPesanan', 'pilihDokumen', 'dokumenDefault',
+            'topProductIds', 'activeShift', 'shiftKasirEnabled', 'cashDrawerEnabled', 'shiftKasirSettings', 'defaultStartingCash'
         ));
     }
 
     private function filteredCatalog(Request $request): array
     {
-        return Product::with('units.unit')->where('is_active', true)
-            ->when($request->q, fn($q) => $q->where(function ($sub) use ($request) {
-                $sub->where('name', 'like', "%{$request->q}%")
-                    ->orWhere('barcode', 'like', "%{$request->q}%")
-                    ->orWhere('sku', 'like', "%{$request->q}%");
-            }))
-            ->when($request->category_id, fn($q) => $q->where('category_id', $request->category_id))
+        return Product::with(['units.unit', 'category'])->where('is_active', true)
+            ->when($request->q, function ($q) use ($request) {
+                $term = trim((string) $request->q);
+                $altTerm = ltrim($term, '0');
+                $q->where(function ($sub) use ($term, $altTerm) {
+                    $sub->where('name', 'like', "%{$term}%")
+                        ->orWhere('barcode', 'like', "%{$term}%")
+                        ->orWhere('sku', 'like', "%{$term}%")
+                        ->orWhereHas('units', fn($uq) => $uq->where('barcode', 'like', "%{$term}%"));
+
+                    if ($altTerm !== '' && $altTerm !== $term) {
+                        $sub->orWhere('barcode', 'like', "%{$altTerm}%")
+                            ->orWhereHas('units', fn($uq) => $uq->where('barcode', 'like', "%{$altTerm}%"));
+                    }
+                });
+            })
+            ->when($request->category_id, function ($q) use ($request) {
+                if ($request->category_id === 'terlaris') {
+                    $topIds = DB::table('sale_items')
+                        ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+                        ->where('sales.order_status', 'completed')
+                        ->whereNotNull('sale_items.product_id')
+                        ->groupBy('sale_items.product_id')
+                        ->select('sale_items.product_id')
+                        ->selectRaw('SUM(sale_items.qty * sale_items.unit_conversion) as total_qty')
+                        ->orderByDesc('total_qty')
+                        ->limit(30)
+                        ->pluck('product_id')
+                        ->all();
+                    $q->whereIn('id', $topIds);
+                } else {
+                    $q->where('category_id', $request->category_id);
+                }
+            })
             ->orderBy('name')
             ->get()
             ->map(fn($p) => $p->toCartArray())
@@ -114,6 +169,20 @@ class KasirController extends Controller
             ->whereHas('product', fn ($q) => $q->where('is_active', true))
             ->first();
 
+        // Toleransi format barcode scanner kemasan (perbedaan leading-zero EAN-13 vs UPC-A)
+        if (! $satuan && str_starts_with($kode, '0') && strlen($kode) > 1) {
+            $altKode = ltrim($kode, '0');
+            $satuan = ProductUnit::with(['product', 'unit'])
+                ->where('barcode', $altKode)
+                ->whereHas('product', fn ($q) => $q->where('is_active', true))
+                ->first();
+        } elseif (! $satuan && ctype_digit($kode) && strlen($kode) < 14) {
+            $satuan = ProductUnit::with(['product', 'unit'])
+                ->where('barcode', '0' . $kode)
+                ->whereHas('product', fn ($q) => $q->where('is_active', true))
+                ->first();
+        }
+
         if ($satuan) {
             return response()->json([
                 'found' => true,
@@ -128,6 +197,18 @@ class KasirController extends Controller
         $product = Product::where('is_active', true)
             ->where(fn ($q) => $q->where('barcode', $kode)->orWhere('sku', $kode))
             ->first();
+
+        // Toleransi format barcode scanner kemasan (perbedaan leading-zero EAN-13 vs UPC-A)
+        if (! $product && str_starts_with($kode, '0') && strlen($kode) > 1) {
+            $altKode = ltrim($kode, '0');
+            $product = Product::where('is_active', true)
+                ->where(fn ($q) => $q->where('barcode', $altKode)->orWhere('sku', $altKode))
+                ->first();
+        } elseif (! $product && ctype_digit($kode) && strlen($kode) < 14) {
+            $product = Product::where('is_active', true)
+                ->where(fn ($q) => $q->where('barcode', '0' . $kode)->orWhere('sku', '0' . $kode))
+                ->first();
+        }
 
         if (! $product) {
             return response()->json([
@@ -228,7 +309,10 @@ class KasirController extends Controller
                 ];
             }
 
-            $discount = $data['discount'] ?? 0;
+            $discount = (float) ($data['discount'] ?? 0);
+            if ($discount > $subtotal) {
+                abort(422, 'Diskon tidak boleh melebihi subtotal belanja (maksimal Rp ' . number_format($subtotal, 0, ',', '.') . ').');
+            }
             $taxSetting = Setting::get('tax', ['enabled' => false, 'percent' => 0, 'include_in_price' => false]);
             $taxPercent = ($taxSetting['enabled'] ?? false) ? ($taxSetting['percent'] ?? 0) : 0;
             $taxBase = max($taxable - ($discount * ($taxable / max($subtotal, 1))), 0);
@@ -256,10 +340,19 @@ class KasirController extends Controller
                 }
             }
 
+            $shiftSettings = Setting::shiftKasir();
+            $shiftEnabled = (bool) ($shiftSettings['enabled'] ?? true);
+            $activeShift = $shiftEnabled ? CashierShift::getActiveShift($request->user()->id) : null;
+
+            if ($shiftEnabled && !empty($shiftSettings['require_shift_for_sales']) && !$activeShift) {
+                abort(422, 'Shift kasir belum dibuka. Harap buka shift kasir terlebih dahulu sebelum memproses transaksi.');
+            }
+
             $sale = Sale::create([
                 'invoice_no' => Sale::generateInvoiceNo(),
                 'customer_id' => $data['customer_id'] ?? null,
                 'user_id' => $request->user()->id,
+                'cashier_shift_id' => $activeShift?->id,
                 'subtotal' => $subtotal,
                 'discount' => $discount,
                 'tax_amount' => $taxAmount,
@@ -341,7 +434,7 @@ class KasirController extends Controller
      */
     public function tahanList()
     {
-        $tertahan = Sale::tertahan()->with(['items', 'cashier'])
+        $tertahan = Sale::tertahan()->with(['items', 'cashier', 'customer'])
             ->orderByDesc('parked_at')
             ->get();
 
@@ -377,6 +470,10 @@ class KasirController extends Controller
             'unit_label' => $item->unit_label,
         ])->values()->all();
 
+        $customerId = $sale->customer_id;
+        $discount = (float) $sale->discount;
+        $note = $sale->note;
+
         // cancelWaiting() yang sudah ada: mengunci baris, memeriksa ulang status di dalam
         // transaksi, mengembalikan stok, dan mencatat StockMovement-nya (H2, H3, H4).
         // Tidak ada jalur pengembalian stok kedua yang perlu dijaga.
@@ -384,6 +481,9 @@ class KasirController extends Controller
 
         return redirect()->route('kasir.index')
             ->with('kasir_keranjang_diambil', $keranjang)
+            ->with('kasir_customer_id', $customerId)
+            ->with('kasir_discount', $discount)
+            ->with('kasir_note', $note)
             ->with('success', 'Transaksi ' . $sale->invoice_no . ' diambil kembali. Silakan lanjutkan.');
     }
 
@@ -777,7 +877,10 @@ class KasirController extends Controller
             $orphanedSubtotal = (float) $sale->items()->whereNull('product_id')->sum('subtotal');
             $subtotal += $orphanedSubtotal;
 
-            $discount = $data['discount'] ?? (float) $sale->discount;
+            $discount = (float) ($data['discount'] ?? $sale->discount);
+            if ($discount > $subtotal) {
+                abort(422, 'Diskon tidak boleh melebihi subtotal belanja (maksimal Rp ' . number_format($subtotal, 0, ',', '.') . ').');
+            }
             $taxSetting = Setting::get('tax', ['enabled' => false, 'percent' => 0, 'include_in_price' => false]);
             $taxPercent = ($taxSetting['enabled'] ?? false) ? ($taxSetting['percent'] ?? 0) : 0;
             $taxBase = max($taxable - ($discount * ($taxable / max($subtotal, 1))), 0);

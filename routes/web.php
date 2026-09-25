@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BarcodePrintController;
+use App\Http\Controllers\CashierShiftController;
 use App\Http\Controllers\CashTransactionController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerController;
@@ -110,6 +111,16 @@ Route::middleware('auth')->group(function () {
         Route::get('/print', [BarcodePrintController::class, 'print'])->name('print');
     });
 
+    // Shift Kasir
+    Route::middleware('menu:shift,kasir')->prefix('shift')->name('shift.')->group(function () {
+        Route::get('/', [CashierShiftController::class, 'index'])->name('index');
+        Route::get('/current', [CashierShiftController::class, 'current'])->name('current');
+        Route::post('/', [CashierShiftController::class, 'store'])->name('store');
+        Route::get('/{shift}/summary', [CashierShiftController::class, 'summary'])->name('summary');
+        Route::post('/{shift}/close', [CashierShiftController::class, 'close'])->name('close');
+        Route::get('/{shift}/print', [CashierShiftController::class, 'print'])->name('print');
+    });
+
     Route::middleware('menu:retur')->prefix('retur')->name('retur.')->group(function () {
         Route::get('/', [ReturnController::class, 'index'])->name('index');
         Route::get('/find', [ReturnController::class, 'findSale'])->name('find');
@@ -200,6 +211,12 @@ Route::middleware('auth')->group(function () {
         Route::get('/database', [SettingController::class, 'database'])->name('database');
         Route::post('/database/migrate', [SettingController::class, 'runMigrate'])->name('database.migrate');
         Route::post('/database/wipe', [SettingController::class, 'wipeData'])->name('database.wipe');
+
+        Route::get('/shift-kasir', [SettingController::class, 'shiftKasir'])->name('shift-kasir');
+        Route::post('/shift-kasir', [SettingController::class, 'updateShiftKasir'])->name('shift-kasir.update');
+
+        Route::get('/jaringan', [SettingController::class, 'jaringan'])->name('jaringan');
+        Route::post('/jaringan', [SettingController::class, 'updateJaringan'])->name('jaringan.update');
 
         Route::get('/tentang', [SettingController::class, 'tentang'])->name('tentang');
     });

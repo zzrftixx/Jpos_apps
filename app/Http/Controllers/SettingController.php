@@ -298,6 +298,7 @@ class SettingController extends Controller
         }
 
         Setting::where('key', PulihkanLoginCommand::KUNCI_CATATAN)->delete();
+        Setting::forget(PulihkanLoginCommand::KUNCI_CATATAN);
         $request->session()->forget('pemulihan_login');
 
         return back()->with('success', 'Peringatan pemulihan login ditutup. Riwayat lengkapnya tetap tersimpan di storage/logs/pemulihan-login.log.');
@@ -498,6 +499,54 @@ class SettingController extends Controller
         return back()->with('success', 'Pengaturan mode produk disimpan.');
     }
 
+    public function shiftKasir()
+    {
+        $settings = Setting::shiftKasir();
+        return view('pengaturan.shift-kasir', compact('settings'));
+    }
+
+    public function updateShiftKasir(Request $request)
+    {
+        $data = [
+            'enabled' => $request->boolean('enabled'),
+            'require_shift_for_sales' => $request->boolean('require_shift_for_sales'),
+            'show_expected_cash_on_close' => $request->boolean('show_expected_cash_on_close', true),
+            // Kas Laci (Modal Awal / Float)
+            'default_starting_cash' => max(0, (float) ($request->default_starting_cash ?? 0)),
+            'starting_cash_mode' => in_array($request->starting_cash_mode, ['fixed', 'last_closing', 'disabled'], true) ? $request->starting_cash_mode : 'fixed',
+            'require_positive_starting_cash' => $request->boolean('require_positive_starting_cash'),
+            // Sistem Waktu Shift (Otomatis vs Manual)
+            'time_mode' => in_array($request->time_mode, ['auto', 'manual'], true) ? $request->time_mode : 'auto',
+        ];
+
+        Setting::set('shift_kasir', $data);
+
+        return back()->with('success', 'Pengaturan Shift Kasir berhasil disimpan.');
+    }
+
+    public function jaringan()
+    {
+        $urls = \App\Support\NetworkInfo::getAccessUrls();
+        $port = \App\Support\NetworkInfo::getActivePort();
+        $firewallCmd = \App\Support\NetworkInfo::getFirewallCommand();
+        $settings = Setting::get('jaringan_lan', [
+            'mode_lan_enabled' => true,
+        ]);
+
+        return view('pengaturan.jaringan', compact('urls', 'port', 'firewallCmd', 'settings'));
+    }
+
+    public function updateJaringan(Request $request)
+    {
+        $data = [
+            'mode_lan_enabled' => $request->boolean('mode_lan_enabled'),
+        ];
+
+        Setting::set('jaringan_lan', $data);
+
+        return back()->with('success', 'Pengaturan Jaringan LAN berhasil disimpan.');
+    }
+
     public function tentang()
     {
         $app = [
@@ -513,5 +562,4 @@ class SettingController extends Controller
 
         return view('pengaturan.tentang', compact('app'));
     }
-
 }

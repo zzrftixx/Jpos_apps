@@ -32,6 +32,8 @@ abstract class JposTestCase extends TestCase
     {
         parent::setUp();
 
+        Setting::flushMemo();
+
         $this->adminRole = Role::create([
             'name' => 'Administrator',
             'slug' => 'admin',

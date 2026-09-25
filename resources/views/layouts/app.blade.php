@@ -127,6 +127,8 @@
             <a href="{{ route('pengaturan.pajak') }}" class="nav-link {{ request()->routeIs('pengaturan.pajak') ? 'nav-active' : '' }}"><x-icon.percent /> Pajak</a>
             <a href="{{ route('pengaturan.backup-restore') }}" class="nav-link {{ request()->routeIs('pengaturan.backup-restore') ? 'nav-active' : '' }}"><x-icon.database /> Backup &amp; Restore</a>
             <a href="{{ route('pengaturan.database') }}" class="nav-link {{ request()->routeIs('pengaturan.database') ? 'nav-active' : '' }}"><x-icon.database /> Database</a>
+            <a href="{{ route('pengaturan.shift-kasir') }}" class="nav-link {{ request()->routeIs('pengaturan.shift-kasir') ? 'nav-active' : '' }}"><x-icon.cart /> Shift Kasir</a>
+            <a href="{{ route('pengaturan.jaringan') }}" class="nav-link {{ request()->routeIs('pengaturan.jaringan') ? 'nav-active' : '' }}"><x-icon.store /> Akses Jaringan (LAN)</a>
             <a href="{{ route('pengaturan.tentang') }}" class="nav-link {{ request()->routeIs('pengaturan.tentang') ? 'nav-active' : '' }}"><x-icon.store /> Tentang Aplikasi</a>
             @endif
         </nav>

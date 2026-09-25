@@ -32,6 +32,8 @@
 /audit-*.md
 /AUDIT*.md
 /UAT*.md
+/PANDUAN_*.md
+/RANCANGAN_*.md
 
 # Aturan & konfigurasi alat agen AI — yang ada sekarang maupun yang
 # mungkin dibuat alat lain nanti. Semuanya memuat aturan proyek ini.

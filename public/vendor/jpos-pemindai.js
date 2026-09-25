@@ -49,7 +49,7 @@
     'use strict';
 
     /** Jeda antar tombol paling lama yang masih dianggap berasal dari alat pindai (ms). */
-    var JEDA_MAKS = 35;
+    var JEDA_MAKS = 65;
 
     /** Kode yang lebih pendek dari ini diabaikan - terlalu mudah tertukar dengan ketikan. */
     var PANJANG_MIN = 4;
