@@ -90,9 +90,10 @@ class PenandaCache
     /**
      * Sidik jari yang berubah persis ketika salah satu cache jadi basi.
      *
-     *   - isi berkas VERSION      -> paket update selalu menaikkannya
-     *   - APP_URL                 -> port berpindah
-     *   - waktu ubah .env         -> pengaturan lain diubah tangan
+     *   - path akar aplikasi     -> folder dipindah atau disalin ke komputer client
+     *   - isi berkas VERSION     -> paket update selalu menaikkannya
+     *   - APP_URL                -> port berpindah
+     *   - waktu ubah .env        -> pengaturan lain diubah tangan
      *   - waktu ubah terbaru di config/, routes/, resources/views/, app/
      *
      * Yang terakhir membuat ini tetap benar walau versinya lupa dinaikkan. Menelusuri ISI
@@ -105,6 +106,7 @@ class PenandaCache
         $env = $this->path('.env');
 
         $bagian = [
+            $this->akar,
             is_file($versi) ? trim((string) @file_get_contents($versi)) : '',
             (string) config('app.url'),
             is_file($env) ? (string) @filemtime($env) : '',

@@ -197,6 +197,21 @@ class WaktuBukaTest extends JposTestCase
         $this->assertFalse($this->penanda->masihSesuai());
     }
 
+    /**
+     * Memindahkan folder aplikasi atau menyalin ke komputer client harus membuat
+     * sidik jari berubah sehingga cache dibangun ulang untuk lokasi baru.
+     */
+    public function test_akar_aplikasi_berpindah_memaksa_pembangunan_ulang(): void
+    {
+        $this->anggapCacheBaruDibangun();
+        $this->assertTrue($this->penanda->masihSesuai());
+
+        $akarBaru = $this->akar . '-pindah';
+        $penandaBaru = new PenandaCache($akarBaru);
+
+        $this->assertNotSame($this->penanda->sidikJari(), $penandaBaru->sidikJari());
+    }
+
     /* ------------------------------------------------------------------- biayanya */
 
     /**

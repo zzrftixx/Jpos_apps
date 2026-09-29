@@ -346,6 +346,62 @@ namespace JPOSLauncher
                         "Gagal membuat kunci keamanan aplikasi (APP_KEY).\n\nPeriksa " + PathLog() + " untuk keterangan teknisnya.");
                 }
             }
+
+            BersihkanCacheJikaPathBerubah();
+        }
+
+        /// <summary>
+        /// Menghapus cache Laravel di bootstrap/cache jika aplikasi dipindahkan/disalin ke folder atau komputer lain.
+        ///
+        /// Laravel mengompilasi path absolut ke dalam bootstrap/cache/config.php dan routes-v7.php.
+        /// Jika folder aplikasi dipindah atau disalin ke komputer client yang jalurnya berbeda,
+        /// cache lama akan mengarahkan request ke path mesin asal yang tidak ada, sehingga server
+        /// mengembalikan galat 500 dan gagal start dalam 90 detik.
+        /// </summary>
+        private static void BersihkanCacheJikaPathBerubah()
+        {
+            try
+            {
+                string cacheDir = Path.Combine(appDir, "bootstrap", "cache");
+                string configFile = Path.Combine(cacheDir, "config.php");
+
+                bool pathBerubah = false;
+                if (File.Exists(configFile))
+                {
+                    string isiConfig = File.ReadAllText(configFile);
+                    if (!isiConfig.Contains(appDir) && !isiConfig.Contains(appDir.Replace("\\", "\\\\")))
+                    {
+                        pathBerubah = true;
+                    }
+                }
+
+                if (pathBerubah)
+                {
+                    Log("Terdeteksi perpindahan folder/komputer (path lama tidak cocok dengan: " + appDir + "). Membersihkan cache lama...");
+                    foreach (string file in new string[] { "config.php", "routes-v7.php", "events.php", "jpos-cache-stamp" })
+                    {
+                        string target = Path.Combine(cacheDir, file);
+                        if (File.Exists(target))
+                        {
+                            try { File.Delete(target); } catch { }
+                        }
+                    }
+
+                    string viewsDir = Path.Combine(appDir, "storage", "framework", "views");
+                    if (Directory.Exists(viewsDir))
+                    {
+                        foreach (string f in Directory.GetFiles(viewsDir))
+                        {
+                            try { File.Delete(f); } catch { }
+                        }
+                    }
+                    Log("Pembersihan cache selesai. Cache baru akan dibangun saat persiapan.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("BersihkanCacheJikaPathBerubah error: " + ex.Message);
+            }
         }
 
         /// <summary>
