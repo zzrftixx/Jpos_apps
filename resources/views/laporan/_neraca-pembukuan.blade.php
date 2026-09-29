@@ -19,8 +19,11 @@
         <input type="number" name="modal_awal" x-ref="modal" class="form-input" min="0" step="1"
                value="{{ (int) ($atur['modal_awal'] ?? 0) }}" required>
         @if($saran !== null && $saran > 0 && (int) $saran !== (int) ($atur['modal_awal'] ?? 0))
-            <button type="button" class="text-xs text-brand-600 hover:underline mt-1" @click="isiSaran()">
-                Pakai angka yang membuat neraca seimbang: Rp {{ number_format($saran, 0, ',', '.') }}
+            <button type="button"
+                    class="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-xs transition shadow-2xs cursor-pointer text-center"
+                    @click="isiSaran()">
+                <svg width="14" height="14" style="width: 14px; height: 14px; min-width: 14px; flex-shrink: 0;" class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                <span>Pakai angka yang membuat neraca seimbang: Rp {{ number_format($saran, 0, ',', '.') }}</span>
             </button>
         @endif
     </div>
@@ -34,10 +37,8 @@
         uang sendiri, dua-duanya sama.
         @if($saran !== null && $saran > 0)
             <br>
-            <strong>Kalau bingung mengisi Modal Awal</strong>, pakai angka yang disarankan di atas.
-            Itu dihitung mundur dari kekayaan toko yang ada sekarang, dan sebagian besar isinya
-            adalah nilai stok yang sudah di rak sebelum pembukuan dimulai &mdash; barang yang
-            memang tidak pernah tercatat asal uangnya karena dulu belum ada menu Pembelian.
+            <strong>Kalau bingung mengisi Modal Awal</strong>, klik tombol hijau <em>"Pakai Saran Seimbang"</em> di atas.
+            Angka tersebut dihitung otomatis dari nilai persediaan stok barang di rak dan aset toko saat ini.
         @endif
     </p>
 </form>

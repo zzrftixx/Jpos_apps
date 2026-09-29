@@ -81,11 +81,8 @@ class GenerateMasifDbCommand extends Command
 
         $this->info('Mulai membangun database simulasi Toko Masif JPOS (JOS MART SUPERMARKET)...');
 
-        $tempPath = storage_path('app/private/temp_masif.sqlite');
-
-        if (File::exists($tempPath)) {
-            File::delete($tempPath);
-        }
+        $tempPath = storage_path('app/private/temp_masif_' . Str::random(8) . '.sqlite');
+        $this->hapusBerkasSqlite($tempPath);
 
         File::ensureDirectoryExists(dirname($tempPath));
         touch($tempPath);
@@ -101,99 +98,121 @@ class GenerateMasifDbCommand extends Command
         DB::purge('sqlite_temp');
         DB::setDefaultConnection('sqlite_temp');
 
-        $this->line('Jalankan migrasi pada database baru...');
-        Artisan::call('migrate:fresh', [
-            '--database' => 'sqlite_temp',
-            '--force' => true,
-        ]);
+        try {
+            $this->line('Jalankan migrasi pada database baru...');
+            Artisan::call('migrate:fresh', [
+                '--database' => 'sqlite_temp',
+                '--force' => true,
+            ]);
 
-        $this->generateData();
-        $this->bangunLapisanMasif();
-        $this->rapikanStokMinus();
+            $this->generateData();
+            $this->bangunLapisanMasif();
+            $this->rapikanStokMinus();
 
-        // Verifikasi Keseimbangan Neraca
-        $posisi = Akuntansi::posisiPada(now()->toDateString());
-        $this->info('--- PEMERIKSAAN KESEIMBANGAN NERACA TOKO SIMULASI ---');
-        $this->line('Total Aset        : Rp ' . number_format($posisi->total_aset, 0, ',', '.'));
-        $this->line('Total Kewajiban   : Rp ' . number_format($posisi->total_kewajiban, 0, ',', '.'));
-        $this->line('Total Modal       : Rp ' . number_format($posisi->total_modal, 0, ',', '.'));
-        $this->line('Selisih Neraca    : Rp ' . number_format($posisi->selisih, 0, ',', '.'));
-
-        if (abs($posisi->selisih) >= 0.01) {
-            // BUKAN TAMBALAN, DAN INI PENTING DIPAHAMI.
-            //
-            // Stok awal toko simulasi dibuat langsung ke tabel produk - tanpa nota pembelian,
-            // persis seperti toko sungguhan yang sudah berjalan sebelum mulai membukukan.
-            // Barang itu nyata ada di rak, jadi nilainya MEMANG bagian dari modal pemilik;
-            // yang belum ada cuma catatannya.
-            //
-            // Mengisi modal awal sebesar selisih itu justru pencatatan yang BENAR, dan itu
-            // pula yang disarankan aplikasi kepada pemilik toko sungguhan lewat
-            // Akuntansi::saranModalAwal(). Terbukti di data client: selisihnya persis sama
-            // dengan persediaan sekarang + HPP seluruh riwayat.
-            $pembukuan = Setting::get('pembukuan');
-            Setting::set('pembukuan', array_merge($pembukuan, [
-                'modal_awal' => Akuntansi::saranModalAwal(now()->toDateString()),
-            ]));
-
+            // Verifikasi Keseimbangan Neraca
             $posisi = Akuntansi::posisiPada(now()->toDateString());
-            $this->line('Modal awal disetel ke nilai stok awal yang tidak bertorehan nota.');
-            $this->line('Selisih setelah disetel: Rp ' . number_format($posisi->selisih, 0, ',', '.'));
-        }
+            $this->info('--- PEMERIKSAAN KESEIMBANGAN NERACA TOKO SIMULASI ---');
+            $this->line('Total Aset        : Rp ' . number_format($posisi->total_aset, 0, ',', '.'));
+            $this->line('Total Kewajiban   : Rp ' . number_format($posisi->total_kewajiban, 0, ',', '.'));
+            $this->line('Total Modal       : Rp ' . number_format($posisi->total_modal, 0, ',', '.'));
+            $this->line('Selisih Neraca    : Rp ' . number_format($posisi->selisih, 0, ',', '.'));
 
-        if (abs($posisi->selisih) >= 0.01) {
-            $this->error('GAGAL: neraca simulasi tidak seimbang. Database tidak disimpan.');
-            DB::disconnect('sqlite_temp');
-            DB::setDefaultConnection('sqlite');
-            File::delete($tempPath);
+            if (abs($posisi->selisih) >= 0.01) {
+                // BUKAN TAMBALAN, DAN INI PENTING DIPAHAMI.
+                //
+                // Stok awal toko simulasi dibuat langsung ke tabel produk - tanpa nota pembelian,
+                // persis seperti toko sungguhan yang sudah berjalan sebelum mulai membukukan.
+                // Barang itu nyata ada di rak, jadi nilainya MEMANG bagian dari modal pemilik;
+                // yang belum ada cuma catatannya.
+                //
+                // Mengisi modal awal sebesar selisih itu justru pencatatan yang BENAR, dan itu
+                // pula yang disarankan aplikasi kepada pemilik toko sungguhan lewat
+                // Akuntansi::saranModalAwal(). Terbukti di data client: selisihnya persis sama
+                // dengan persediaan sekarang + HPP seluruh riwayat.
+                $pembukuan = Setting::get('pembukuan');
+                Setting::set('pembukuan', array_merge($pembukuan, [
+                    'modal_awal' => Akuntansi::saranModalAwal(now()->toDateString()),
+                ]));
 
-            return self::FAILURE;
-        }
+                $posisi = Akuntansi::posisiPada(now()->toDateString());
+                $this->line('Modal awal disetel ke nilai stok awal yang tidak bertorehan nota.');
+                $this->line('Selisih setelah disetel: Rp ' . number_format($posisi->selisih, 0, ',', '.'));
+            }
 
-        $this->bekukanNeracaHariIni();
+            if (abs($posisi->selisih) >= 0.01) {
+                $this->error('GAGAL: neraca simulasi tidak seimbang. Database tidak disimpan.');
 
-        DB::statement('PRAGMA wal_checkpoint(TRUNCATE)');
-        DB::disconnect('sqlite_temp');
-        DB::setDefaultConnection('sqlite');
+                return self::FAILURE;
+            }
 
-        // Salin ke dua lokasi: database/toko_masif_simulasi.sqlite dan storage/app/private/backups/
-        // --tujuan dipakai test otomatis supaya pemeriksaannya tidak menimpa berkas simulasi
-        // yang sedang dipakai orang untuk mengamati aplikasi.
-        $dbDest = $this->option('tujuan') ?: database_path('toko_masif_simulasi.sqlite');
-        File::ensureDirectoryExists(dirname($dbDest));
-        File::copy($tempPath, $dbDest);
+            $this->bekukanNeracaHariIni();
 
-        if ($this->option('tujuan')) {
-            File::delete($tempPath);
-            $this->info('Database simulasi dibuat di: ' . $dbDest);
+            // Salin ke dua lokasi: database/toko_masif_simulasi.sqlite dan storage/app/private/backups/
+            // --tujuan dipakai test otomatis supaya pemeriksaannya tidak menimpa berkas simulasi
+            // yang sedang dipakai orang untuk mengamati aplikasi.
+            $dbDest = $this->option('tujuan') ?: database_path('toko_masif_simulasi.sqlite');
+            File::ensureDirectoryExists(dirname($dbDest));
+            $this->hapusBerkasSqlite($dbDest);
+
+            $vakumBerhasil = false;
+            try {
+                DB::statement("VACUUM INTO '" . str_replace("'", "''", $dbDest) . "'");
+                $vakumBerhasil = is_file($dbDest) && filesize($dbDest) > 0;
+            } catch (\Throwable) {
+                $vakumBerhasil = false;
+            }
+
+            if (! $vakumBerhasil) {
+                try {
+                    DB::statement('PRAGMA wal_checkpoint(TRUNCATE)');
+                } catch (\Throwable) {
+                }
+                DB::disconnect('sqlite_temp');
+                File::copy($tempPath, $dbDest);
+            }
+
+            if ($this->option('tujuan')) {
+                $this->info('Database simulasi dibuat di: ' . $dbDest);
+
+                return self::SUCCESS;
+            }
+
+            // SENGAJA BUKAN ke folder backup sungguhan.
+            //
+            // storage/app/private/backups dibaca menu Pengaturan > Backup & Restore. Menaruh
+            // salinan simulasi di sana membuatnya tampil berdampingan dengan backup asli, dan
+            // sekali klik Restore berarti SELURUH DATA PENJUALAN TOKO diganti data karangan.
+            $simulasiDir = storage_path('app/simulasi');
+            File::ensureDirectoryExists($simulasiDir);
+            $backupDest = $simulasiDir . DIRECTORY_SEPARATOR . 'toko_masif_simulasi-' . now()->format('Y-m-d_His') . '.sqlite';
+            File::copy($dbDest, $backupDest);
+
+            $this->info('BERHASIL!');
+            $this->info('Database simulasi dibuat di dua lokasi:');
+            $this->line('  1. ' . $dbDest);
+            $this->line('  2. ' . $backupDest);
+            $this->newLine();
+            $this->line('Cara memakainya:');
+            $this->line('  DB_CONNECTION=sqlite DB_DATABASE=' . $dbDest . ' php artisan serve');
+            $this->newLine();
+            $this->comment('Salinan di storage/app/simulasi SENGAJA tidak ditaruh di folder backup,');
+            $this->comment('supaya tidak bisa tidak sengaja dipulihkan menimpa data toko sungguhan.');
 
             return self::SUCCESS;
+        } finally {
+            DB::purge('sqlite_temp');
+            DB::setDefaultConnection('sqlite');
+            $this->hapusBerkasSqlite($tempPath);
         }
+    }
 
-        // SENGAJA BUKAN ke folder backup sungguhan.
-        //
-        // storage/app/private/backups dibaca menu Pengaturan > Backup & Restore. Menaruh
-        // salinan simulasi di sana membuatnya tampil berdampingan dengan backup asli, dan
-        // sekali klik Restore berarti SELURUH DATA PENJUALAN TOKO diganti data karangan.
-        $simulasiDir = storage_path('app/simulasi');
-        File::ensureDirectoryExists($simulasiDir);
-        $backupDest = $simulasiDir . DIRECTORY_SEPARATOR . 'toko_masif_simulasi-' . now()->format('Y-m-d_His') . '.sqlite';
-        File::copy($tempPath, $backupDest);
-
-        File::delete($tempPath);
-
-        $this->info('BERHASIL!');
-        $this->info('Database simulasi dibuat di dua lokasi:');
-        $this->line('  1. ' . $dbDest);
-        $this->line('  2. ' . $backupDest);
-        $this->newLine();
-        $this->line('Cara memakainya:');
-        $this->line('  DB_CONNECTION=sqlite DB_DATABASE=' . $dbDest . ' php artisan serve');
-        $this->newLine();
-        $this->comment('Salinan di storage/app/simulasi SENGAJA tidak ditaruh di folder backup,');
-        $this->comment('supaya tidak bisa tidak sengaja dipulihkan menimpa data toko sungguhan.');
-
-        return self::SUCCESS;
+    private function hapusBerkasSqlite(string $path): void
+    {
+        foreach ([$path, $path . '-wal', $path . '-shm', $path . '-journal'] as $f) {
+            if (File::exists($f)) {
+                @unlink($f);
+            }
+        }
     }
 
     /**

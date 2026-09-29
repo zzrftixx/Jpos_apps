@@ -13,7 +13,8 @@ class Product extends Model
     protected $fillable = [
         'name', 'type', 'sku', 'barcode', 'category_id', 'supplier_id', 'unit',
         'multi_unit_enabled', 'hpp_calc_enabled',
-        'cost_price', 'sell_price', 'wholesale_price', 'wholesale_min_qty',
+        'cost_price', 'sell_price', 'reseller_price', 'grosir_price',
+        'wholesale_price', 'wholesale_min_qty',
         'stock', 'min_stock', 'is_taxable',
         'image', 'description', 'is_active',
     ];
@@ -25,6 +26,8 @@ class Product extends Model
         'hpp_calc_enabled' => 'boolean',
         'cost_price' => 'decimal:2',
         'sell_price' => 'decimal:2',
+        'reseller_price' => 'decimal:2',
+        'grosir_price' => 'decimal:2',
         'wholesale_price' => 'decimal:2',
         // Sengaja 'float', bukan 'decimal:4'. Stok boleh pecahan sejak barang timbangan
         // bisa dijual per Kg atau per Gram; cast decimal menghasilkan STRING ("9.6000")
@@ -127,7 +130,10 @@ class Product extends Model
             'name' => $this->name,
             'type' => $this->type,
             'sku' => $this->sku,
+            'barcode' => $this->barcode,
             'sell_price' => (float) $this->sell_price,
+            'reseller_price' => $this->reseller_price !== null ? (float) $this->reseller_price : null,
+            'grosir_price' => $this->grosir_price !== null ? (float) $this->grosir_price : null,
             'wholesale_price' => $this->wholesale_price !== null ? (float) $this->wholesale_price : null,
             'wholesale_min_qty' => $this->wholesale_min_qty,
             'unit' => $this->unit,
@@ -140,6 +146,7 @@ class Product extends Model
             'additional_units' => $this->units->map(fn($pu) => $pu->toCartArray())->values()->all(),
             'stock' => $this->stock,
             'category_id' => $this->category_id,
+            'category_name' => $this->category?->name,
             'image_url' => $this->image_url,
             'is_taxable' => $this->is_taxable,
             // Ditanam ke katalog supaya kasir bisa menjawab "ada di mana?" tanpa mencari ke

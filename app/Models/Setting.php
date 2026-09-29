@@ -60,6 +60,15 @@ class Setting extends Model
     }
 
     /**
+     * Tata letak Modul Kasir ('modern' / 'sederhana') yang diatur di Pengaturan > Tampilan Kasir.
+     * 'modern' (default): layout 2 panel modern JPOS (katalog di kiri, keranjang di kanan).
+     */
+    public static function kasirLayout(): string
+    {
+        return 'modern';
+    }
+
+    /**
      * Mode form Produk (sederhana/lengkap) yang diatur di Pengaturan > Mode Produk.
      * Harga Grosir & Min. Qty Grosir SELALU tampil di kedua mode (dianggap fitur dasar).
      * 'sederhana' (default) menyembunyikan section Satuan Tambahan (multi-satuan/konversi)

@@ -9,7 +9,11 @@ class CustomerController extends Controller
 {
     public function index(Request $request)
     {
-        $customers = Customer::when($request->q, fn($q) => $q->where('name', 'like', "%{$request->q}%"))
+        $customers = Customer::when($request->q, fn($q) => $q->where(function ($sub) use ($request) {
+                $sub->where('name', 'like', "%{$request->q}%")
+                    ->orWhere('phone', 'like', "%{$request->q}%");
+            }))
+            ->when($request->customer_type, fn($q) => $q->where('customer_type', $request->customer_type))
             ->orderBy('name')
             ->paginate(15)
             ->withQueryString();
@@ -21,10 +25,12 @@ class CustomerController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'customer_type' => ['nullable', 'string', 'in:UMUM,Reseller,Grosir'],
             'phone' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable', 'string'],
         ]);
+        $data['customer_type'] = $data['customer_type'] ?: 'UMUM';
         Customer::create($data);
         return back()->with('success', 'Pelanggan berhasil ditambahkan.');
     }
@@ -33,10 +39,12 @@ class CustomerController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'customer_type' => ['nullable', 'string', 'in:UMUM,Reseller,Grosir'],
             'phone' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable', 'string'],
         ]);
+        $data['customer_type'] = $data['customer_type'] ?: 'UMUM';
         $customer->update($data);
         return back()->with('success', 'Pelanggan berhasil diperbarui.');
     }

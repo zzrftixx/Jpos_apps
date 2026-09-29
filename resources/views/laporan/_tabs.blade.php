@@ -7,6 +7,7 @@
         'laporan.neraca' => 'Neraca',
         'laporan.per-pelanggan' => 'Penjualan per Pelanggan',
         'laporan.stok' => 'Stok Barang',
+        'laporan.mutasi-stok' => 'Rekap Mutasi Stok',
         'laporan.terlaris' => 'Produk Terlaris',
     ];
 @endphp

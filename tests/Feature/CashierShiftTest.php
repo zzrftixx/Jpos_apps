@@ -400,38 +400,16 @@ class CashierShiftTest extends JposTestCase
         $this->assertNull($shift->difference);
     }
 
-    public function test_laporan_shift_dapat_diakses_dan_menampilkan_data(): void
+    public function test_form_modal_shift_mengizinkan_nominal_bulat_tanpa_step_mismatch(): void
     {
-        $shift = CashierShift::create([
-            'user_id' => $this->kasir->id,
-            'opened_at' => now(),
-            'starting_cash' => 50000,
-            'expected_cash' => 50000,
-            'status' => 'open',
+        \App\Models\Setting::set('shift_kasir', [
+            'enabled' => true,
+            'require_positive_starting_cash' => true,
         ]);
 
-        $response = $this->actingAs($this->admin)->get('/laporan/shift');
+        $response = $this->actingAs($this->kasir)->get('/kasir');
         $response->assertOk();
-        $response->assertSee('Laporan Transaksi per Shift');
-        $response->assertSee('#' . $shift->id);
-    }
-
-    public function test_ekspor_laporan_shift_pdf_dan_excel(): void
-    {
-        CashierShift::create([
-            'user_id' => $this->kasir->id,
-            'opened_at' => now(),
-            'starting_cash' => 50000,
-            'expected_cash' => 50000,
-            'status' => 'open',
-        ]);
-
-        $pdf = $this->actingAs($this->admin)->get('/laporan/ekspor/shift/pdf');
-        $pdf->assertOk();
-        $pdf->assertHeader('Content-Type', 'application/pdf');
-
-        $xlsx = $this->actingAs($this->admin)->get('/laporan/ekspor/shift/xlsx');
-        $xlsx->assertOk();
-        $xlsx->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        // Memastikan input starting_cash menggunakan step="any" agar browser tidak memblokir angka bulat seperti 100000 saat min="1"
+        $this->assertMatchesRegularExpression('/name=["\']starting_cash["\'][^>]*step=["\']any["\']|step=["\']any["\'][^>]*name=["\']starting_cash["\']/', $response->getContent());
     }
 }

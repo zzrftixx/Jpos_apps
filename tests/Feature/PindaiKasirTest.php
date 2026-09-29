@@ -284,4 +284,120 @@ class PindaiKasirTest extends JposTestCase
         $this->assertCount(1, $baris['additional_units']);
         $this->assertSame('Karung', $baris['additional_units'][0]['unit_name']);
     }
+
+    public function test_katalog_kasir_membawa_barcode_produk_dan_barcode_satuan(): void
+    {
+        $produk = $this->makeProduct(['name' => 'Biskuit', 'barcode' => '8991112223334']);
+        $satuan = $this->makeProductUnit($produk, 'Karton', 10, 150000);
+        $satuan->update(['barcode' => '8991112229999']);
+
+        $katalog = collect(
+            $this->actingAs($this->kasir)->get(route('kasir.index'))->assertOk()->viewData('productsForCart')
+        );
+
+        $baris = $katalog->firstWhere('id', $produk->id);
+        $this->assertNotNull($baris);
+        $this->assertSame('8991112223334', $baris['barcode'], 'Barcode produk harus ada di katalog keranjang kasir.');
+        $this->assertSame('8991112229999', $baris['additional_units'][0]['barcode'], 'Barcode satuan harus ada di katalog keranjang kasir.');
+    }
+
+    public function test_pindai_toleran_terhadap_leading_zero_pada_barcode_produk(): void
+    {
+        $produk = $this->makeProduct(['name' => 'Kecap Asin', 'barcode' => '0899123456789']);
+
+        // Dipindai tanpa angka 0 di depan (mis. scanner mengirim UPC-A 12 digit)
+        $this->pindai('899123456789')
+            ->assertOk()
+            ->assertJson(['found' => true])
+            ->assertJsonPath('product.id', $produk->id);
+
+        // Dipindai dengan angka 0 di depan
+        $this->pindai('0899123456789')
+            ->assertOk()
+            ->assertJson(['found' => true])
+            ->assertJsonPath('product.id', $produk->id);
+    }
+
+    public function test_pindai_toleran_terhadap_leading_zero_pada_barcode_satuan(): void
+    {
+        $produk = $this->makeProduct(['name' => 'Susu Kotak', 'barcode' => '8997771112223']);
+        $satuan = $this->makeProductUnit($produk, 'Dus', 24, 120000);
+        $satuan->update(['barcode' => '0899777333444']);
+
+        // Dipindai tanpa angka 0 di depan
+        $this->pindai('899777333444')
+            ->assertOk()
+            ->assertJson([
+                'found' => true,
+                'unit_id' => $satuan->id,
+                'unit_name' => 'Dus',
+            ])
+            ->assertJsonPath('product.id', $produk->id);
+    }
+
+    public function test_pencarian_katalog_kasir_lewat_url_mendukung_barcode_satuan(): void
+    {
+        $produk = $this->makeProduct(['name' => 'Deterjen Bubuk', 'barcode' => '8995551110001']);
+        $satuan = $this->makeProductUnit($produk, 'Renceng', 12, 24000);
+        $satuan->update(['barcode' => '8995551110002']);
+
+        $res = $this->actingAs($this->kasir)->get(route('kasir.index', ['q' => '8995551110002']))->assertOk();
+        $items = collect($res->viewData('productsForCart'));
+        $this->assertTrue($items->contains('id', $produk->id), 'Pencarian kasir harus menemukan produk lewat barcode satuan.');
+    }
+
+    public function test_pencarian_master_produk_mendukung_barcode_satuan_dan_toleran_leading_zero(): void
+    {
+        $produk = $this->makeProduct(['name' => 'Kopi Sachet', 'barcode' => '8993334445551']);
+        $satuan = $this->makeProductUnit($produk, 'Renceng', 10, 15000);
+        $satuan->update(['barcode' => '8993334445552']);
+
+        // Cari lewat barcode satuan di Master Produk
+        $res = $this->actingAs($this->admin)->get(route('produk.index', ['q' => '8993334445552']))->assertOk();
+        $products = $res->viewData('products');
+        $this->assertTrue($products->contains('id', $produk->id), 'Master Produk harus menemukan produk lewat barcode satuan.');
+
+        // Cari dengan leading zero di Master Produk (mis. scanner kirim 0899...)
+        $resZero = $this->actingAs($this->admin)->get(route('produk.index', ['q' => '08993334445551']))->assertOk();
+        $productsZero = $resZero->viewData('products');
+        $this->assertTrue($productsZero->contains('id', $produk->id), 'Master Produk harus toleran leading zero saat mencari.');
+    }
+
+    public function test_pindai_barcode_produk_tanpa_nol_ditemukan_saat_dipindai_dengan_nol(): void
+    {
+        $produk = $this->makeProduct(['name' => 'Teh Celup', 'barcode' => '8998889990001']);
+
+        $this->pindai('08998889990001')
+            ->assertOk()
+            ->assertJson(['found' => true])
+            ->assertJsonPath('product.id', $produk->id);
+    }
+
+    public function test_pindai_barcode_satuan_tanpa_nol_ditemukan_saat_dipindai_dengan_nol(): void
+    {
+        $produk = $this->makeProduct(['name' => 'Wafer Cokelat', 'barcode' => '8991231231231']);
+        $satuan = $this->makeProductUnit($produk, 'Kaleng', 6, 90000);
+        $satuan->update(['barcode' => '8991231231232']);
+
+        $this->pindai('08991231231232')
+            ->assertOk()
+            ->assertJson([
+                'found' => true,
+                'unit_id' => $satuan->id,
+                'unit_name' => 'Kaleng',
+            ])
+            ->assertJsonPath('product.id', $produk->id);
+    }
+
+    public function test_cetak_barcode_mendukung_pencarian_barcode_satuan(): void
+    {
+        $produk = $this->makeProduct(['name' => 'Minyak Goreng', 'barcode' => '8994441112221']);
+        $satuan = $this->makeProductUnit($produk, 'Jerigen', 4, 120000);
+        $satuan->update(['barcode' => '8994441112222']);
+
+        $res = $this->actingAs($this->admin)->get(route('barcode.index', ['q' => '8994441112222']))->assertOk();
+        $products = $res->viewData('products');
+        $this->assertTrue($products->contains('id', $produk->id), 'Cetak Barcode harus menemukan produk lewat barcode satuan.');
+    }
 }
+

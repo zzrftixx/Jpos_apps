@@ -256,6 +256,13 @@ class KasirController extends Controller
             $subtotal = 0;
             $taxable = 0;
             $lineItems = [];
+            $customerId = $data['customer_id'] ?? null;
+            $customerType = 'UMUM';
+            if ($customerId) {
+                $customer = Customer::find($customerId);
+                $customerType = $customer?->customer_type ?? 'UMUM';
+            }
+
             $lockedProducts = [];
             $requestedBaseUnitsByProduct = [];
 
@@ -269,7 +276,7 @@ class KasirController extends Controller
                 $qty = $item['qty'];
 
                 ['conversion' => $unitConversion, 'label' => $unitLabel, 'price' => $unitPrice, 'is_weighable' => $bolehPecahan]
-                    = $this->resolveUnitPricing($product, $item['unit_type'] ?? 'base', $qty);
+                    = $this->resolveUnitPricing($product, $item['unit_type'] ?? 'base', $qty, $customerType);
 
                 $this->pastikanQtyBolehPecahan($product, $qty, $bolehPecahan, $unitLabel);
 
@@ -752,6 +759,13 @@ class KasirController extends Controller
                     : ($product ? ($petaTimbangan[$product->unit] ?? false) : false),
                 'qty' => (float) $item->qty,
                 'price' => (float) $item->price,
+                'sell_price' => $matchedUnit ? (float) $matchedUnit->price : ($product ? (float) $product->sell_price : (float) $item->price),
+                'reseller_price' => $matchedUnit
+                    ? ($matchedUnit->reseller_price !== null ? (float) $matchedUnit->reseller_price : null)
+                    : ($product && $product->reseller_price !== null ? (float) $product->reseller_price : null),
+                'grosir_price' => $matchedUnit
+                    ? ($matchedUnit->grosir_price !== null ? (float) $matchedUnit->grosir_price : null)
+                    : ($product && $product->grosir_price !== null ? (float) $product->grosir_price : null),
                 'wholesale_price' => $matchedUnit
                     ? ($matchedUnit->wholesale_price !== null ? (float) $matchedUnit->wholesale_price : null)
                     : ($product && $product->wholesale_price !== null ? (float) $product->wholesale_price : null),
@@ -759,12 +773,13 @@ class KasirController extends Controller
             ];
         })->values();
 
+        $customerType = $sale->customer?->customer_type ?? 'UMUM';
         $orphanedItems = $sale->items->whereNull('product_id')->values();
         $tax = Setting::get('tax', ['enabled' => false, 'percent' => 0, 'include_in_price' => false]);
         ['view' => $defaultView, 'toggle' => $allowToggle] = Setting::kasirDisplayMode();
 
         return view('transaksi.kasir.waiting-list-edit', compact(
-            'sale', 'productsForCart', 'initialCart', 'initialReserved', 'orphanedItems', 'tax', 'defaultView', 'allowToggle'
+            'sale', 'productsForCart', 'initialCart', 'initialReserved', 'orphanedItems', 'tax', 'defaultView', 'allowToggle', 'customerType'
         ));
     }
 
@@ -811,6 +826,7 @@ class KasirController extends Controller
             // 2. Buat ulang baris item dari daftar baru, memakai logika yang sama seperti store().
             $subtotal = 0;
             $taxable = 0;
+            $customerType = $sale->customer?->customer_type ?? 'UMUM';
             $lockedProducts = [];
             $requestedBaseUnitsByProduct = [];
 
@@ -824,7 +840,7 @@ class KasirController extends Controller
                 $qty = $item['qty'];
 
                 ['conversion' => $unitConversion, 'label' => $unitLabel, 'price' => $unitPrice, 'is_weighable' => $bolehPecahan]
-                    = $this->resolveUnitPricing($product, $item['unit_type'] ?? 'base', $qty);
+                    = $this->resolveUnitPricing($product, $item['unit_type'] ?? 'base', $qty, $customerType);
 
                 $this->pastikanQtyBolehPecahan($product, $qty, $bolehPecahan, $unitLabel);
 

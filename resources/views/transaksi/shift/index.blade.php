@@ -307,7 +307,7 @@
                         <input type="number" name="starting_cash" required
                                min="{{ !empty($shiftKasirSettings['require_positive_starting_cash']) ? 1 : 0 }}"
                                value="{{ (int) ($defaultStartingCash ?? 0) }}"
-                               step="100" placeholder="0" autofocus
+                               step="any" placeholder="0" autofocus
                                class="w-full py-2 px-3 text-sm font-bold text-slate-900 border-0 focus:ring-0 font-mono">
                     </div>
                     @if(($shiftKasirSettings['starting_cash_mode'] ?? 'fixed') === 'last_closing')
@@ -411,7 +411,7 @@
                         </label>
                         <div class="flex items-stretch rounded-lg border border-slate-300 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100 bg-white overflow-hidden shadow-2xs">
                             <span class="inline-flex items-center px-3 bg-slate-100 text-slate-600 font-bold text-xs border-r border-slate-200 select-none">Rp</span>
-                            <input type="number" name="actual_cash" x-model.number="tutupUangFisik" required min="0" step="100" placeholder="0"
+                            <input type="number" name="actual_cash" x-model.number="tutupUangFisik" required min="0" step="any" placeholder="0"
                                    class="w-full py-2.5 px-3 text-base font-bold font-mono text-slate-900 border-0 focus:ring-0">
                         </div>
                     </div>

@@ -83,6 +83,7 @@ class EksporLaporanTest extends JposTestCase
             'kas' => ['kas'],
             'hutang' => ['hutang'],
             'piutang' => ['piutang'],
+            'shift' => ['shift'],
         ];
     }
 
@@ -327,23 +328,21 @@ class EksporLaporanTest extends JposTestCase
         $buat('waiting', 'INVTUNGGU001', 22222);
         $buat('cancelled', 'INVBATAL0001', 33333);
 
-        // Tanpa penyaring: ketiganya ikut.
+        // Tanpa penyaring: transaksi aktif ikut (completed & waiting), dibatalkan TIDAK ikut.
         $semua = $this->teksLembar('penjualan');
-        foreach (['INVLUNAS0001', 'INVTUNGGU001', 'INVBATAL0001'] as $inv) {
-            $this->assertStringContainsString($inv, $semua, "Tanpa penyaring, {$inv} harus ikut.");
-        }
+        $this->assertStringContainsString('INVLUNAS0001', $semua);
+        $this->assertStringContainsString('INVTUNGGU001', $semua);
+        $this->assertStringNotContainsString('INVBATAL0001', $semua, "Transaksi batal tidak boleh masuk laporan.");
 
-        // Dengan penyaring: HANYA yang diminta.
-        $hanyaBatal = $this->teksLembar('penjualan', ['order_status' => 'cancelled']);
-
-        $this->assertStringContainsString('INVBATAL0001', $hanyaBatal);
-        $this->assertStringNotContainsString('INVLUNAS0001', $hanyaBatal,
-            'Penyaring status diabaikan - berkas unduhan memuat transaksi di luar yang disaring.');
-        $this->assertStringNotContainsString('INVTUNGGU001', $hanyaBatal);
-
+        // Dengan penyaring waiting: HANYA waiting yang tampil.
         $hanyaTunggu = $this->teksLembar('penjualan', ['order_status' => 'waiting']);
         $this->assertStringContainsString('INVTUNGGU001', $hanyaTunggu);
+        $this->assertStringNotContainsString('INVLUNAS0001', $hanyaTunggu);
         $this->assertStringNotContainsString('INVBATAL0001', $hanyaTunggu);
+
+        // Jika status cancelled diminta, transaksi batal tetap tidak dilaporkan
+        $hanyaBatal = $this->teksLembar('penjualan', ['order_status' => 'cancelled']);
+        $this->assertStringNotContainsString('INVBATAL0001', $hanyaBatal);
     }
 
     /**
@@ -352,6 +351,7 @@ class EksporLaporanTest extends JposTestCase
      * Pemilik toko yang membuka PDF akan bertanya persis seperti saat melihat layar: "kalau
      * semuanya dijumlahkan jadi berapa, dan isinya apa saja". Kalau jawabannya cuma ada di
      * layar, ia kembali harus memakai kalkulator - persis keluhan yang memunculkan fitur ini.
+     * Transaksi dibatalkan tidak dilaporkan dan tidak dihitung.
      */
     public function test_berkas_unduhan_memuat_rincian_per_status(): void
     {
@@ -374,10 +374,96 @@ class EksporLaporanTest extends JposTestCase
         $this->assertStringContainsString('Rincian Seluruh Transaksi', $teks);
         $this->assertStringContainsString('JUMLAH SEMUANYA', $teks);
         $this->assertStringContainsString('piutang, belum jadi omset', $teks);
+        $this->assertStringNotContainsString('uangnya tidak pernah masuk', $teks);
+        $this->assertStringNotContainsString('INVBATAL0002', $teks, 'Transaksi batal tidak boleh masuk laporan.');
 
-        // Yang paling menentukan: totalnya dihitungkan, bukan dibiarkan ke kalkulator.
+        // Yang paling menentukan: totalnya dihitungkan hanya transaksi aktif (1jt + 2jt = 3jt, batal tidak masuk).
         $this->assertStringContainsString('Rp 3.000.000', $teks,
-            'Jumlah kedua status (lunas & tunggu) tidak dihitungkan di berkas unduhan.');
+            'Jumlah transaksi aktif tidak dihitungkan di berkas unduhan.');
+        $this->assertStringNotContainsString('Rp 6.000.000', $teks,
+            'Transaksi batal tidak boleh masuk perhitungan total.');
+    }
+
+    public function test_laporan_penjualan_memuat_rincian_non_tunai_dan_ringkasan_lunas(): void
+    {
+        $this->siapkanData();
+
+        $teks = $this->teksLembar('penjualan');
+
+        $this->assertStringContainsString('Total Pendapatan (Lunas)', $teks);
+        $this->assertStringContainsString('Total Uang Masuk', $teks);
+        $this->assertStringContainsString('Non-Tunai', $teks);
+    }
+
+    public function test_penyaring_stok_menipis_dan_pencarian_ikut_ke_ekspor(): void
+    {
+        $this->siapkanData();
+        $this->makeProduct(['name' => 'Biskuit Khong Guan', 'stock' => 50, 'min_stock' => 10]);
+        $this->makeProduct(['name' => 'Susu Kental Manis', 'stock' => 2, 'min_stock' => 10]);
+
+        $hanyaMenipis = $this->teksLembar('stok', ['low_stock' => '1']);
+        $this->assertStringContainsString('Susu Kental Manis', $hanyaMenipis);
+        $this->assertStringNotContainsString('Biskuit Khong Guan', $hanyaMenipis);
+        $this->assertStringContainsString('Hanya Stok Menipis', $hanyaMenipis);
+
+        $cariKhong = $this->teksLembar('stok', ['q' => 'Khong']);
+        $this->assertStringContainsString('Biskuit Khong Guan', $cariKhong);
+        $this->assertStringNotContainsString('Susu Kental Manis', $cariKhong);
+    }
+
+    public function test_penyaring_tipe_kas_ikut_ke_ekspor(): void
+    {
+        $this->siapkanData();
+
+        $this->actingAs($this->admin)->post('/kas', [
+            'type' => 'in', 'category' => 'lain_lain', 'amount' => 50000, 'note' => 'Pendapatan parkir',
+        ])->assertSessionHasNoErrors();
+
+        $hanyaMasuk = $this->teksLembar('kas', ['type' => 'in']);
+        $this->assertStringContainsString('Kas Masuk', $hanyaMasuk);
+        $this->assertStringContainsString('Pendapatan parkir', $hanyaMasuk);
+
+        $hanyaKeluar = $this->teksLembar('kas', ['type' => 'out']);
+        $this->assertStringContainsString('Kas Keluar', $hanyaKeluar);
+        $this->assertStringNotContainsString('Pendapatan parkir', $hanyaKeluar);
+    }
+
+    public function test_penyaring_hutang_dan_nota_pemasok_ikut_ke_ekspor(): void
+    {
+        $this->siapkanData();
+
+        $supplier = \App\Models\Supplier::create(['name' => 'PT Sumber Rejeki']);
+        Purchase::create([
+            'purchase_no' => 'BELI-TEST-001',
+            'supplier_invoice_no' => 'NOTA-SUPPLIER-99',
+            'supplier_id' => $supplier->id,
+            'purchase_date' => now()->toDateString(),
+            'due_date' => now()->addDays(14)->toDateString(),
+            'total' => 250000,
+            'paid_amount' => 0,
+            'sisa_hutang' => 250000,
+            'status' => 'hutang',
+            'user_id' => $this->admin->id,
+        ]);
+
+        $teks = $this->teksLembar('hutang');
+        $this->assertStringContainsString('NOTA-SUPPLIER-99', $teks);
+
+        $cari = $this->teksLembar('hutang', ['q' => 'Sumber Rejeki']);
+        $this->assertStringContainsString('PT Sumber Rejeki', $cari);
+        $this->assertStringContainsString('NOTA-SUPPLIER-99', $cari);
+    }
+
+    public function test_penyaring_piutang_dan_metode_ikut_ke_ekspor(): void
+    {
+        $this->siapkanData();
+
+        $sale = \App\Models\Sale::where('order_status', 'waiting')->first();
+        $this->assertNotNull($sale);
+
+        $teks = $this->teksLembar('piutang', ['q' => $sale->invoice_no]);
+        $this->assertStringContainsString($sale->invoice_no, $teks);
+        $this->assertStringContainsString('Tunai', $teks);
     }
 
     /** Status karangan di alamat diabaikan, bukan diteruskan mentah ke query. */

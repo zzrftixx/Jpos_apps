@@ -4,19 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\CashTransaction;
 use App\Models\FixedAsset;
+use App\Models\User;
+use App\Support\Akuntansi;
+use App\Support\MetodeBayar;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Buku kas: seluruh pergerakan uang DI LUAR penjualan.
+ * Buku kas: mencatat dan memantau seluruh pergerakan uang kas toko secara terpadu.
  *
- * Sejak versi 2.3.0, ini adalah SATU-SATUNYA tempat transaksi dicatat tangan - termasuk
- * setoran modal, pengambilan pribadi (prive), dan pembelian peralatan. Neraca hanya
- * MENAMPILKAN hasilnya; ia tidak lagi punya formulir sendiri.
- *
- * Alasannya bukan kerapian tampilan. Satu jenis transaksi yang bisa dimasukkan dari dua
- * tempat cepat atau lambat akan diperlakukan berbeda di salah satunya - dan selisih neraca
- * yang muncul karenanya nyaris mustahil ditelusuri berbulan-bulan kemudian.
+ * Menampilkan kas masuk dari penjualan kasir, kas masuk manual, pengeluaran operasional,
+ * pembelian barang dagangan, hingga refund retur penjualan dalam satu buku mutasi yang utuh.
  */
 class CashTransactionController extends Controller
 {
@@ -25,24 +24,38 @@ class CashTransactionController extends Controller
         $from = $request->from ?: now()->startOfMonth()->toDateString();
         $to = $request->to ?: now()->toDateString();
 
-        $transactions = CashTransaction::with(['user', 'fixedAsset'])
-            ->whereDate('created_at', '>=', $from)
-            ->whereDate('created_at', '<=', $to)
-            ->when($request->type, fn ($q) => $q->where('type', $request->type))
-            ->orderByDesc('created_at')
-            ->paginate(20)
-            ->withQueryString();
+        $summary = Akuntansi::ringkasanKas($from, $to);
 
-        $summary = CashTransaction::whereDate('created_at', '>=', $from)
-            ->whereDate('created_at', '<=', $to)
-            ->selectRaw("SUM(CASE WHEN type = 'in' THEN amount ELSE 0 END) as total_in")
-            ->selectRaw("SUM(CASE WHEN type = 'out' THEN amount ELSE 0 END) as total_out")
-            ->first();
+        $query = Akuntansi::queryMutasiKas($from, $to, $request->type);
+        $transactions = $query->paginate(20)->withQueryString();
+
+        $userIds = $transactions->pluck('user_id')->filter()->unique();
+        $users = User::whereIn('id', $userIds)->pluck('name', 'id');
+
+        $categories = CashTransaction::categories();
+
+        $transactions->getCollection()->transform(function ($item) use ($users, $categories) {
+            $item->user_name = $users[$item->user_id] ?? '-';
+            $item->created_at = Carbon::parse($item->created_at);
+
+            if ($item->source_type === 'sale') {
+                $item->category_label = 'Penjualan (' . MetodeBayar::label($item->category) . ')';
+                $item->display_note = 'Nota: ' . $item->note . ($item->extra_info ? ' (' . $item->extra_info . ')' : '');
+            } elseif ($item->source_type === 'sale_return') {
+                $item->category_label = 'Retur Penjualan (Refund)';
+                $item->display_note = 'Retur: ' . $item->note . ($item->extra_info ? ' - Alasan: ' . $item->extra_info : '');
+            } else {
+                $item->category_label = $categories[$item->category] ?? $item->category;
+                $item->display_note = $item->note ?: '-';
+            }
+
+            return $item;
+        });
 
         return view('transaksi.kas.index', [
             'transactions' => $transactions,
             'summary' => $summary,
-            'categories' => CashTransaction::categories(),
+            'categories' => $categories,
             'keteranganKategori' => CashTransaction::keteranganKategori(),
             'from' => $from,
             'to' => $to,

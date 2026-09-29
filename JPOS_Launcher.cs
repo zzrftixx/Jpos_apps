@@ -495,7 +495,7 @@ namespace JPOSLauncher
             TcpListener listener = null;
             try
             {
-                listener = new TcpListener(IPAddress.Loopback, port);
+                listener = new TcpListener(IPAddress.Any, port);
                 listener.Start();
                 return true;
             }
@@ -513,13 +513,17 @@ namespace JPOSLauncher
         {
             ProcessStartInfo psi = new ProcessStartInfo();
             psi.FileName = phpExe;
-            psi.Arguments = string.Format("artisan serve --host=127.0.0.1 --port={0} --no-reload", port);
+            // Dengarkan pada 0.0.0.0 agar dapat diakses dari perangkat lain di LAN (komputer kasir 2, HP, tablet)
+            psi.Arguments = string.Format("artisan serve --host=0.0.0.0 --port={0} --no-reload", port);
             psi.WorkingDirectory = appDir;
             psi.UseShellExecute = false;
             psi.CreateNoWindow = true;
             psi.WindowStyle = ProcessWindowStyle.Hidden;
             psi.RedirectStandardError = true;
             psi.StandardErrorEncoding = Encoding.UTF8;
+
+            // Multi-worker agar banyak kasir/perangkat di LAN dapat bertransaksi bersamaan tanpa antre/saling blokir
+            psi.EnvironmentVariables["PHP_CLI_SERVER_WORKERS"] = "4";
 
             phpProcess = new Process();
             phpProcess.StartInfo = psi;
@@ -634,6 +638,52 @@ namespace JPOSLauncher
             return "";
         }
 
+        private static string DapatkanIpLan()
+        {
+            try
+            {
+                string host = Dns.GetHostName();
+                IPHostEntry entry = Dns.GetHostEntry(host);
+                foreach (IPAddress ip in entry.AddressList)
+                {
+                    if (ip.AddressFamily == AddressFamily.InterNetwork)
+                    {
+                        string s = ip.ToString();
+                        if (!s.StartsWith("127.") && !s.StartsWith("169.254."))
+                        {
+                            return s;
+                        }
+                    }
+                }
+            }
+            catch { }
+            return "";
+        }
+
+        private static void BukaFirewallLan()
+        {
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = "netsh";
+                psi.Arguments = "advfirewall firewall add rule name=\"JPOS Multi-Device LAN\" dir=in action=allow protocol=TCP localport=8000-8099";
+                psi.Verb = "runas";
+                psi.UseShellExecute = true;
+                psi.WindowStyle = ProcessWindowStyle.Hidden;
+                Process p = Process.Start(psi);
+                if (p != null) p.WaitForExit();
+                MessageBox.Show(
+                    "Izin Windows Firewall untuk JPOS (Port 8000-8099) berhasil diaktifkan!\n\nPerangkat kasir lain (Komputer B, Tablet, HP) sekarang dapat terhubung lancar.",
+                    "JPOS Multi-Device LAN", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "Tidak dapat membuka firewall otomatis: " + ex.Message + "\n\nSilakan jalankan berkas BUKA-FIREWALL-LAN.bat dengan klik kanan -> Run as administrator.",
+                    "JPOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
         private static void SetupSystemTray()
         {
             ContextMenu menu = new ContextMenu();
@@ -649,11 +699,31 @@ namespace JPOSLauncher
             itemBuka.DefaultItem = true;
             MenuItem itemFolder = new MenuItem("Buka Folder Aplikasi", delegate { Process.Start("explorer.exe", appDir); });
             MenuItem itemLog = new MenuItem("Lihat Log Teknis", delegate { BukaLog(); });
+
+            string lanIp = DapatkanIpLan();
+            MenuItem itemLan = null;
+            if (!string.IsNullOrEmpty(lanIp))
+            {
+                string urlLan = "http://" + lanIp + ":" + serverPort;
+                itemLan = new MenuItem("Salin URL Akses LAN (" + lanIp + ")", delegate {
+                    try {
+                        Clipboard.SetText(urlLan);
+                        MessageBox.Show("Alamat URL Akses LAN berhasil disalin ke clipboard:\n" + urlLan + "\n\nBuka alamat ini di browser HP, Tablet, atau Komputer Kasir lain pada jaringan Wi-Fi/LAN yang sama.", "JPOS Multi-Device LAN", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    } catch { }
+                });
+            }
+
+            MenuItem itemFirewall = new MenuItem("Buka Izin Firewall LAN", delegate { BukaFirewallLan(); });
             MenuItem itemKeluar = new MenuItem("Keluar & Matikan Server", delegate { ExitApp(); });
 
             menu.MenuItems.Add(itemJudul);
             menu.MenuItems.Add("-");
             menu.MenuItems.Add(itemBuka);
+            if (itemLan != null)
+            {
+                menu.MenuItems.Add(itemLan);
+            }
+            menu.MenuItems.Add(itemFirewall);
             menu.MenuItems.Add(itemFolder);
             menu.MenuItems.Add(itemLog);
             menu.MenuItems.Add("-");
@@ -666,9 +736,14 @@ namespace JPOSLauncher
             notifyIcon.Visible = true;
             notifyIcon.DoubleClick += delegate { OpenBrowser(); };
 
-            notifyIcon.ShowBalloonTip(3000, "JPOS siap dipakai",
-                "Aplikasi kasir berjalan di http://localhost:" + serverPort + "\nKlik dua kali ikon ini untuk membukanya kembali.",
-                ToolTipIcon.Info);
+            string tipText = "Aplikasi kasir berjalan di http://localhost:" + serverPort;
+            if (!string.IsNullOrEmpty(lanIp))
+            {
+                tipText += "\nAkses LAN: http://" + lanIp + ":" + serverPort;
+            }
+            tipText += "\nKlik dua kali ikon ini untuk membukanya kembali.";
+
+            notifyIcon.ShowBalloonTip(3000, "JPOS siap dipakai", tipText, ToolTipIcon.Info);
         }
 
         private static void BukaLog()

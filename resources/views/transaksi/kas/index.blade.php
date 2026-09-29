@@ -4,7 +4,7 @@
 @section('content')
 @if(auth()->user()->can_access('laporan'))
     <div class="flex justify-end mb-4">
-        @include('laporan._ekspor', ['jenis' => 'kas', 'filter' => ['from' => request('from'), 'to' => request('to')]])
+        @include('laporan._ekspor', ['jenis' => 'kas', 'filter' => array_filter(['from' => request('from'), 'to' => request('to'), 'type' => request('type')])])
     </div>
 @endif
 
@@ -20,6 +20,12 @@
             pilihKategori(k) { this.kategori = k; if (k === 'aset_tetap') this.type = 'out' },
         }">
             <h3 class="font-semibold mb-3">Catat Transaksi Kas</h3>
+            <div class="mb-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 leading-relaxed flex items-start gap-2">
+                <svg class="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <div>
+                    <span class="font-semibold">Penjualan Kasir Otomatis Masuk:</span> Uang penjualan dari kasir sudah langsung dicatat sebagai Kas Masuk. Form ini hanya untuk mutasi kas di luar kasir (biaya operasional, modal, prive, gaji, pembelian barang, dll).
+                </div>
+            </div>
             <form method="POST" action="{{ route('kas.store') }}" class="space-y-3">
                 @csrf
                 <div class="flex rounded-lg border overflow-hidden text-sm">
@@ -93,49 +99,148 @@
                 <input type="date" name="to" value="{{ $to }}" class="form-input">
             </div>
             <div>
-                <label class="form-label">Tipe</label>
+                <label class="form-label">Tipe Mutasi</label>
                 <select name="type" class="form-select">
-                    <option value="">Semua</option>
-                    <option value="in" {{ request('type') == 'in' ? 'selected' : '' }}>Kas Masuk</option>
-                    <option value="out" {{ request('type') == 'out' ? 'selected' : '' }}>Kas Keluar</option>
+                    <option value="">Semua Mutasi</option>
+                    <option value="in" {{ request('type') == 'in' ? 'selected' : '' }}>Semua Kas Masuk</option>
+                    <option value="sale" {{ request('type') == 'sale' ? 'selected' : '' }}>Kas Masuk - Penjualan Kasir</option>
+                    <option value="manual_in" {{ request('type') == 'manual_in' ? 'selected' : '' }}>Kas Masuk - Non-Penjualan (Manual)</option>
+                    <option value="out" {{ request('type') == 'out' ? 'selected' : '' }}>Semua Kas Keluar</option>
+                    <option value="manual_out" {{ request('type') == 'manual_out' ? 'selected' : '' }}>Kas Keluar - Non-Retur (Manual/Beban)</option>
+                    <option value="return" {{ request('type') == 'return' ? 'selected' : '' }}>Kas Keluar - Refund Retur</option>
                 </select>
             </div>
             <button class="btn btn-primary">Terapkan</button>
         </form>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-            <div class="card p-4"><div class="text-xs text-slate-500">Total Kas Masuk</div><div class="text-xl font-bold text-green-600">Rp {{ number_format($summary->total_in ?? 0, 0, ',', '.') }}</div></div>
-            <div class="card p-4"><div class="text-xs text-slate-500">Total Kas Keluar</div><div class="text-xl font-bold text-red-600">Rp {{ number_format($summary->total_out ?? 0, 0, ',', '.') }}</div></div>
-            <div class="card p-4"><div class="text-xs text-slate-500">Saldo (Masuk - Keluar)</div><div class="text-xl font-bold">Rp {{ number_format(($summary->total_in ?? 0) - ($summary->total_out ?? 0), 0, ',', '.') }}</div></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <div class="card p-4">
+                <div class="flex items-center justify-between">
+                    <div class="text-xs text-slate-500 font-medium">Total Kas Masuk</div>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-semibold">Periode</span>
+                </div>
+                <div class="text-xl font-bold text-green-600 mt-1">Rp {{ number_format($summary->total_in ?? 0, 0, ',', '.') }}</div>
+                <div class="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 space-y-0.5">
+                    <div class="flex justify-between">
+                        <span>Penjualan Kasir:</span>
+                        <strong class="text-slate-700">Rp {{ number_format($summary->penjualan ?? 0, 0, ',', '.') }}</strong>
+                    </div>
+                    @if(!empty($summary->penjualan_per_metode))
+                    <div class="text-[10px] text-slate-400 pl-1">
+                        @foreach($summary->penjualan_per_metode as $m => $val)
+                            {{ \App\Support\MetodeBayar::label($m) }}: {{ number_format($val, 0, ',', '.') }}{{ !$loop->last ? ' • ' : '' }}
+                        @endforeach
+                    </div>
+                    @endif
+                    <div class="flex justify-between">
+                        <span>Kas Masuk Manual:</span>
+                        <strong class="text-slate-700">Rp {{ number_format($summary->manual_in ?? 0, 0, ',', '.') }}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-4">
+                <div class="flex items-center justify-between">
+                    <div class="text-xs text-slate-500 font-medium">Total Kas Keluar</div>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">Periode</span>
+                </div>
+                <div class="text-xl font-bold text-red-600 mt-1">Rp {{ number_format($summary->total_out ?? 0, 0, ',', '.') }}</div>
+                <div class="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-100 space-y-0.5">
+                    <div class="flex justify-between">
+                        <span>Beban & Pembelian:</span>
+                        <strong class="text-slate-700">Rp {{ number_format($summary->manual_out ?? 0, 0, ',', '.') }}</strong>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Refund Retur:</span>
+                        <strong class="text-slate-700">Rp {{ number_format($summary->refund_retur ?? 0, 0, ',', '.') }}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-4">
+                <div class="flex items-center justify-between">
+                    <div class="text-xs text-slate-500 font-medium">Saldo Periode</div>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold">Masuk - Keluar</span>
+                </div>
+                <div class="text-xl font-bold mt-1 {{ ($summary->saldo_periode ?? 0) >= 0 ? 'text-slate-800' : 'text-red-600' }}">
+                    Rp {{ number_format($summary->saldo_periode ?? 0, 0, ',', '.') }}
+                </div>
+                <div class="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
+                    Pergerakan kas bersih toko selama periode yang dipilih.
+                </div>
+            </div>
+
+            <div class="card p-4 bg-slate-50 border-slate-200">
+                <div class="flex items-center justify-between">
+                    <div class="text-xs text-slate-600 font-medium">Saldo Kas Toko (Riil)</div>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-semibold">Neraca</span>
+                </div>
+                <div class="text-xl font-bold text-primary-700 mt-1">
+                    Rp {{ number_format($summary->saldo_kas_toko ?? 0, 0, ',', '.') }}
+                </div>
+                <div class="text-[11px] text-slate-500 mt-2 pt-2 border-t border-slate-200">
+                    Posisi uang kas toko saat ini (termasuk saldo awal & mutasi).
+                </div>
+            </div>
         </div>
 
         <div class="card overflow-hidden">
             <table class="data-table w-full">
-                <thead><tr><th>Tanggal</th><th>Tipe</th><th>Kategori</th><th class="text-right">Jumlah</th><th>Keterangan</th><th>User</th><th></th></tr></thead>
+                <thead>
+                    <tr>
+                        <th>Tanggal</th>
+                        <th>Tipe</th>
+                        <th>Kategori / Sumber</th>
+                        <th class="text-right">Jumlah</th>
+                        <th>Keterangan</th>
+                        <th>Petugas</th>
+                        <th class="text-right">Aksi</th>
+                    </tr>
+                </thead>
                 <tbody>
                     @forelse($transactions as $t)
                     <tr>
-                        <td>{{ $t->created_at->format('d/m/Y H:i') }}</td>
+                        <td class="whitespace-nowrap">{{ $t->created_at->format('d/m/Y H:i') }}</td>
                         <td>
-                            <span class="px-2 py-0.5 rounded-full text-xs {{ $t->type === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }}">
+                            <span class="px-2 py-0.5 rounded-full text-xs font-medium {{ $t->type === 'in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }}">
                                 {{ $t->type === 'in' ? 'Masuk' : 'Keluar' }}
                             </span>
                         </td>
-                        <td>{{ $categories[$t->category] ?? $t->category }}</td>
-                        <td class="text-right {{ $t->type === 'in' ? 'text-green-600' : 'text-red-600' }}">
+                        <td>
+                            <div class="font-medium text-slate-800">{{ $t->category_label }}</div>
+                            @if($t->source_type === 'sale')
+                                <span class="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Kasir POS</span>
+                            @elseif($t->source_type === 'sale_return')
+                                <span class="text-[10px] text-rose-600 font-semibold uppercase tracking-wider">Retur Refund</span>
+                            @else
+                                <span class="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Buku Kas</span>
+                            @endif
+                        </td>
+                        <td class="text-right font-semibold whitespace-nowrap {{ $t->type === 'in' ? 'text-green-600' : 'text-red-600' }}">
                             {{ $t->type === 'in' ? '+' : '-' }} Rp {{ number_format($t->amount, 0, ',', '.') }}
                         </td>
-                        <td class="text-slate-500">{{ $t->note ?: '-' }}</td>
-                        <td>{{ $t->user->name ?? '-' }}</td>
-                        <td class="text-right">
-                            <form method="POST" action="{{ route('kas.destroy', $t) }}" onsubmit="return confirm('Hapus catatan kas ini?')">
-                                @csrf @method('DELETE')
-                                <button class="text-red-600 text-sm hover:underline">Hapus</button>
-                            </form>
+                        <td class="text-slate-600 text-sm max-w-xs truncate" title="{{ $t->display_note }}">
+                            {{ $t->display_note }}
+                        </td>
+                        <td class="text-slate-600 text-sm whitespace-nowrap">{{ $t->user_name ?? '-' }}</td>
+                        <td class="text-right whitespace-nowrap">
+                            @if($t->source_type === 'sale')
+                                <a href="{{ route('kasir.receipt', $t->reference_id) }}" target="_blank" class="text-primary-600 hover:underline text-xs inline-flex items-center gap-1">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                    Struk
+                                </a>
+                            @elseif($t->source_type === 'cash_transaction')
+                                <form method="POST" action="{{ route('kas.destroy', $t->reference_id) }}" onsubmit="return confirm('Hapus catatan kas ini?')" class="inline">
+                                    @csrf @method('DELETE')
+                                    <button class="text-red-600 text-sm hover:underline">Hapus</button>
+                                </form>
+                            @else
+                                <span class="text-xs text-slate-400">-</span>
+                            @endif
                         </td>
                     </tr>
                     @empty
-                    <tr><td colspan="7" class="text-center text-slate-400 py-8">Belum ada catatan kas.</td></tr>
+                    <tr><td colspan="7" class="text-center text-slate-400 py-8">Belum ada catatan mutasi kas pada periode ini.</td></tr>
                     @endforelse
                 </tbody>
             </table>

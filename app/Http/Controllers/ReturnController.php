@@ -39,7 +39,7 @@ class ReturnController extends Controller
 
     public function findSale(Request $request)
     {
-        $sale = Sale::with(['items' => function ($q) {
+        $sale = Sale::with(['customer', 'items' => function ($q) {
             $q->whereColumn('returned_qty', '<', 'qty');
         }])->where('invoice_no', $request->invoice_no)
             ->where('order_status', 'completed')
@@ -54,6 +54,8 @@ class ReturnController extends Controller
             'sale' => [
                 'id' => $sale->id,
                 'invoice_no' => $sale->invoice_no,
+                'customer_type' => $sale->customer?->customer_type ?? 'UMUM',
+                'customer_name' => $sale->customer?->name ?? 'Umum',
                 'total' => (float) $sale->total,
                 'paid_amount' => (float) $sale->paid_amount,
                 'created_at' => $sale->created_at->format('d/m/Y H:i'),
@@ -169,13 +171,14 @@ class ReturnController extends Controller
             if (!empty($data['add_items'])) {
                 $addedSubtotal = 0;
                 $addedTaxable = 0;
+                $customerType = $sale->customer?->customer_type ?? 'UMUM';
 
                 foreach ($data['add_items'] as $item) {
                     $product = Product::lockForUpdate()->findOrFail($item['product_id']);
                     $qty = $item['qty'];
 
                     ['conversion' => $unitConversion, 'label' => $unitLabel, 'price' => $unitPrice, 'is_weighable' => $bolehPecahan]
-                        = $this->resolveUnitPricing($product, $item['unit_type'] ?? 'base', $qty);
+                        = $this->resolveUnitPricing($product, $item['unit_type'] ?? 'base', $qty, $customerType);
 
                     $this->pastikanQtyBolehPecahan($product, $qty, $bolehPecahan, $unitLabel);
 

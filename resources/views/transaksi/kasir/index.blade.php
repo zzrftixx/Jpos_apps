@@ -550,6 +550,22 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
     height: auto !important;
     min-height: 0 !important;
 }
+
+/* ==========================================================================
+   PANEL KERANJANG FLEKSIBEL (RESIZABLE SPLITTER & PRESET)
+   ========================================================================== */
+@media (min-width: 1024px) {
+    .kasir-cart-panel {
+        width: var(--cart-width, 24rem) !important;
+        min-width: 360px !important;
+        max-width: min(var(--cart-width, 24rem), 55vw) !important;
+    }
+}
+.resizer-handle {
+    cursor: col-resize;
+    user-select: none;
+    touch-action: none;
+}
 </style>
 @endpush
 
@@ -596,8 +612,8 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
         {{-- Tengah: Jam Realtime & Tanggal --}}
         <div class="hidden lg:flex items-center gap-2.5 bg-slate-50 border border-slate-200/70 px-3 py-1 rounded-full text-xs text-slate-600">
             <span class="flex h-2 w-2 relative">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
             <span class="font-medium" x-text="tanggalHariIni"></span>
             <span class="text-slate-300">&bull;</span>
@@ -633,11 +649,11 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
             @if($shiftKasirEnabled)
                 @if($activeShift)
                     <button type="button" @click="bukaModalTutupShift({{ $activeShift->id }})"
-                            class="h-9 px-2.5 rounded-xl border border-green-300 bg-green-50 hover:bg-green-100 text-green-800 font-semibold text-xs transition inline-flex items-center gap-1.5 shrink-0 select-none cursor-pointer"
+                            class="h-9 px-2.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold text-xs transition inline-flex items-center gap-1.5 shrink-0 select-none cursor-pointer"
                             title="Shift Kasir Aktif. Klik untuk melihat ringkasan uang laci atau tutup shift.">
-                        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                         <span class="whitespace-nowrap">Shift: <strong class="font-mono">Rp {{ number_format($activeShift->starting_cash, 0, ',', '.') }}</strong></span>
-                        <span class="text-[10px] text-green-700 bg-green-100 px-1.5 py-0.5 rounded font-bold">Tutup &rarr;</span>
+                        <span class="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded font-bold">Tutup &rarr;</span>
                     </button>
                 @else
                     <button type="button" @click="showBukaShiftModal = true"
@@ -651,19 +667,19 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
 
             {{-- Tombol Tahan Pesanan (Card Gerigi & seukuran Waiting List) --}}
             <a href="{{ route('kasir.tahan') }}"
-               class="h-9 px-2.5 rounded-xl border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-800 font-semibold text-xs transition inline-flex items-center gap-1.5 shrink-0"
+               class="h-9 px-2.5 rounded-xl border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-800 font-semibold text-xs transition inline-flex items-center gap-1.5 shrink-0"
                title="Lihat Daftar Transaksi Tertahan / Tahan Pesanan">
                 {{-- Ikon Card Gerigi (Nota / Struk Ber-gerigi) --}}
-                <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                <svg class="w-4 h-4 text-sky-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 3h12v18l-3-2-3 2-3-2-3 2V3zm3 5h6M9 11h6M9 14h3"/>
                 </svg>
                 <span class="whitespace-nowrap">Tahan Pesanan</span>
                 <span x-show="jumlahTertahan > 0" x-text="jumlahTertahan"
-                      class="px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold leading-none"></span>
+                      class="px-1.5 py-0.5 rounded-full bg-sky-600 text-white text-[10px] font-bold leading-none"></span>
                 <span x-show="!jumlahTertahan"
-                      class="px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold leading-none">0</span>
+                      class="px-1.5 py-0.5 rounded-full bg-blue-100 text-sky-700 text-[10px] font-semibold leading-none">0</span>
                 @if(($jumlahTertahan ?? 0) > 0)
-                    <span x-show="false" class="px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold leading-none">{{ $jumlahTertahan }}</span>
+                    <span x-show="false" class="px-1.5 py-0.5 rounded-full bg-sky-600 text-white text-[10px] font-bold leading-none">{{ $jumlahTertahan }}</span>
                 @endif
             </a>
 
@@ -697,18 +713,18 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
 
     {{-- Banner Notifikasi Transaksi Tertahan --}}
     <div x-show="pesanSuksesTahan" x-cloak x-transition
-         class="mb-3 p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs flex items-center justify-between shadow-2xs">
+         class="mb-3 p-3 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs flex items-center justify-between shadow-2xs">
         <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <svg class="w-4 h-4 text-sky-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 3h12v18l-3-2-3 2-3-2-3 2V3zm3 5h6M9 11h6M9 14h3"/>
             </svg>
             <span class="font-medium" x-text="pesanSuksesTahan"></span>
         </div>
         <div class="flex items-center gap-2 shrink-0">
-            <a href="{{ route('kasir.tahan') }}" class="btn btn-xs bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 font-bold px-2.5 py-1 rounded-lg">
+            <a href="{{ route('kasir.tahan') }}" class="btn btn-xs bg-white border border-sky-300 text-sky-700 hover:bg-sky-100 font-bold px-2.5 py-1 rounded-lg">
                 Lihat Transaksi Tertahan (<span x-text="jumlahTertahan"></span>) &rarr;
             </a>
-            <button type="button" @click="pesanSuksesTahan = ''" class="text-blue-400 hover:text-blue-600 font-bold px-1.5 py-0.5 rounded">&times;</button>
+            <button type="button" @click="pesanSuksesTahan = ''" class="text-sky-400 hover:text-sky-600 font-bold px-1.5 py-0.5 rounded">&times;</button>
         </div>
     </div>
 
@@ -739,12 +755,12 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                 {{-- Hasil pindaian barcode --}}
                 <div x-show="scanPesan" x-cloak x-transition.opacity
                      class="text-xs rounded-xl px-3.5 py-2 flex items-center gap-2"
-                     :class="scanGagal ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-green-50 border border-green-200 text-green-800'">
+                     :class="scanGagal ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-800'">
                     <template x-if="scanGagal">
                         <svg class="w-4 h-4 shrink-0 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
                     </template>
                     <template x-if="!scanGagal">
-                        <svg class="w-4 h-4 shrink-0 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                        <svg class="w-4 h-4 shrink-0 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                     </template>
                     <span class="font-medium" x-text="scanPesan"></span>
                 </div>
@@ -859,12 +875,19 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                         </div>
 
                         <div class="mt-2.5 pt-2 border-t border-slate-100">
-                            <div class="text-sm sm:text-base font-black text-brand-600 tracking-tight" x-text="'Rp ' + formatNumber(p.sell_price)"></div>
+                            <div class="flex items-baseline justify-between gap-1">
+                                <div class="text-sm sm:text-base font-black text-brand-600 tracking-tight" x-text="'Rp ' + formatNumber(displayPrice(p))"></div>
+                                <template x-if="customerType() !== 'UMUM' && displayPrice(p) !== Number(p.sell_price)">
+                                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                                          :class="customerType() === 'RESELLER' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'"
+                                          x-text="customerType() === 'RESELLER' ? 'Reseller' : 'Grosir'"></span>
+                                </template>
+                            </div>
                             <template x-if="p.additional_units && p.additional_units.length > 0">
                                 <div class="text-[10px] font-medium text-amber-700 truncate mt-1" x-text="'atau per ' + p.additional_units.map(u => u.unit_name).join('/')"></div>
                             </template>
                             <template x-if="p.wholesale_price">
-                                <div class="text-[10px] font-semibold text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200/60 inline-block mt-1" x-text="'Grosir min ' + formatNumber(p.wholesale_min_qty)"></div>
+                                <div class="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60 inline-block mt-1" x-text="'Grosir min ' + formatNumber(p.wholesale_min_qty)"></div>
                             </template>
                         </div>
                     </button>
@@ -920,11 +943,17 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                                             <div class="text-[10px] text-slate-500 mt-0.5">
                                                 <span class="text-amber-600 font-medium" x-show="p.additional_units && p.additional_units.length > 0" x-text="'atau per ' + p.additional_units.map(u => u.unit_name).join('/')"></span>
                                                 <span x-show="(p.additional_units && p.additional_units.length > 0) && p.wholesale_price"> &middot; </span>
-                                                <span class="text-green-600 font-medium" x-show="p.wholesale_price" x-text="'grosir min ' + formatNumber(p.wholesale_min_qty)"></span>
+                                                <span class="text-emerald-600 font-medium" x-show="p.wholesale_price" x-text="'grosir min ' + formatNumber(p.wholesale_min_qty)"></span>
                                             </div>
                                         </template>
+                                    <td class="py-2 px-3 text-right">
+                                        <div class="font-bold text-slate-900" x-text="'Rp ' + formatNumber(displayPrice(p))"></div>
+                                        <template x-if="customerType() !== 'UMUM' && displayPrice(p) !== Number(p.sell_price)">
+                                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded inline-block mt-0.5"
+                                                  :class="customerType() === 'RESELLER' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'"
+                                                  x-text="customerType() === 'RESELLER' ? 'Reseller' : 'Grosir'"></span>
+                                        </template>
                                     </td>
-                                    <td class="py-2 px-3 text-right font-bold text-slate-900" x-text="'Rp ' + formatNumber(p.sell_price)"></td>
                                     <td class="py-2 px-3 text-right">
                                         <span x-show="p.type === 'jasa'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
                                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -958,7 +987,15 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
              tetikus di tempat yang salah, dan yang bergerak bukan yang ia maksud. Sekarang
              hanya ada satu gulungan, daftarnya bebas setinggi isinya, dan dua angka yang paling
              sering dicari tidak pernah hilang dari layar. --}}
-        <div class="w-full lg:w-96 xl:w-[27rem] shrink-0 flex flex-col card p-0 lg:overflow-hidden">
+        <div class="relative w-full lg:w-96 xl:w-[27rem] kasir-cart-panel shrink-0 flex flex-col card p-0 lg:overflow-hidden"
+             :style="'--cart-width: ' + cartWidth + 'px'">
+
+            {{-- Resizer Splitter Bar (Desktop Only) --}}
+            <div class="hidden lg:flex items-center justify-center absolute -left-2 top-0 bottom-0 w-3 z-20 group resizer-handle"
+                 @mousedown="startCartResize($event)"
+                 title="Tarik ke kiri untuk memperlebar keranjang (membaca nama produk panjang)">
+                <div class="w-1 h-12 rounded-full bg-slate-300 group-hover:bg-brand-500 transition-colors"></div>
+            </div>
 
             {{-- Dua zona ini hanya berlaku di layar lebar. Di layar sempit panelnya menumpuk
                  di bawah daftar produk dan HALAMANNYA yang menggulung - kalau kaki tetapnya
@@ -975,6 +1012,12 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                               class="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full bg-brand-500 text-white text-xs font-bold">0</span>
                     </h3>
                     <div class="flex items-center gap-2">
+                        {{-- Preset Ukuran Panel Keranjang (Desktop) --}}
+                        <div class="hidden lg:inline-flex items-center rounded-lg bg-slate-100 p-0.5 text-[11px] font-medium text-slate-600 mr-1" title="Pilihan lebar panel keranjang kasir">
+                            <button type="button" @click="setCartPreset(384)" :class="cartWidth <= 384 ? 'bg-white text-brand-600 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'" class="px-1.5 py-0.5 rounded transition">Normal</button>
+                            <button type="button" @click="setCartPreset(480)" :class="cartWidth > 384 && cartWidth <= 480 ? 'bg-white text-brand-600 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'" class="px-1.5 py-0.5 rounded transition">Lebar</button>
+                            <button type="button" @click="setCartPreset(560)" :class="cartWidth > 480 ? 'bg-white text-brand-600 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-800'" class="px-1.5 py-0.5 rounded transition">Maks</button>
+                        </div>
                         {{-- Penanda bahwa isi keranjang aman kalau kasir perlu pindah halaman dulu --}}
                         <span x-show="cart.length > 0" x-cloak class="text-[11px] text-slate-400" title="Keranjang tersimpan otomatis, aman kalau Anda pindah halaman dulu">Tersimpan</span>
                         <button type="button" x-show="cart.length > 0" x-cloak
@@ -998,14 +1041,35 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                     </div>
                 </template>
 
-                {{-- Customer dropdown --}}
+                {{-- Customer dropdown & Indikator Kategori Pelanggan --}}
                 <div class="mb-3">
-                    <select x-model="customerId" class="form-select w-full">
-                        <option value="">Pelanggan Umum</option>
-                        @foreach($customers as $c)
-                            <option value="{{ $c->id }}">{{ $c->name }}</option>
-                        @endforeach
-                    </select>
+                    <div class="flex items-center gap-2">
+                        <div class="flex-1">
+                            <select x-model="customerId" class="form-select w-full text-xs font-medium">
+                                <option value="">Pelanggan Umum (UMUM)</option>
+                                @foreach($customers as $c)
+                                    <option value="{{ $c->id }}">{{ $c->name }} ({{ $c->customer_type ?? 'UMUM' }})</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="shrink-0">
+                            <template x-if="customerType() === 'RESELLER'">
+                                <span class="inline-flex items-center px-2 py-1.5 rounded-lg text-xs font-bold bg-blue-100 text-blue-700 border border-blue-200">
+                                    Reseller
+                                </span>
+                            </template>
+                            <template x-if="customerType() === 'GROSIR'">
+                                <span class="inline-flex items-center px-2 py-1.5 rounded-lg text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                                    Grosir
+                                </span>
+                            </template>
+                            <template x-if="customerType() === 'UMUM'">
+                                <span class="inline-flex items-center px-2 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                    UMUM
+                                </span>
+                            </template>
+                        </div>
+                    </div>
                 </div>
 
 
@@ -1044,7 +1108,11 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                                     <div class="cart-price-info">
                                         <span class="cart-unit-price" x-text="'@ Rp ' + formatNumber(linePrice(item))"></span>
                                         <span x-show="item.unit_label" class="cart-unit-badge" x-text="'/ ' + item.unit_label"></span>
-                                        <span x-show="isWholesaleActive(item)" class="cart-grosir-badge">Grosir</span>
+                                        <template x-if="activeTierBadge(item)">
+                                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ml-1"
+                                                  :class="activeTierBadge(item).class"
+                                                  x-text="activeTierBadge(item).label"></span>
+                                        </template>
                                     </div>
 
                                     <div class="flex items-center gap-1.5 shrink-0">
@@ -1188,7 +1256,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                                 {{-- Tombol Uang Pas --}}
                                 <button type="button" @click="paidAmount = total()"
                                         class="w-full py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition border flex items-center justify-center gap-2 shadow-2xs cursor-pointer active:scale-95"
-                                        :class="paidAmount === total() && total() > 0 ? 'bg-green-600 text-white border-green-600 ring-2 ring-green-300' : 'bg-green-50 hover:bg-green-100 text-green-800 border-green-300'">
+                                        :class="paidAmount === total() && total() > 0 ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-300' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'">
                                     <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
                                     <span>Uang Pas</span>
                                     <span class="font-extrabold" x-show="total() > 0" x-text="'(Rp ' + formatNumber(total()) + ')'"></span>
@@ -1218,7 +1286,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                                     </span>
                                 </div>
                                 <span class="text-3xl sm:text-4xl font-black tabular-nums tracking-tight"
-                                      :class="change() < 0 ? 'text-red-500' : 'text-green-600'"
+                                      :class="change() < 0 ? 'text-red-500' : 'text-emerald-600'"
                                       x-text="'Rp ' + formatNumber(Math.max(change(),0))">Rp 0</span>
                             </div>
                         </template>
@@ -1279,8 +1347,8 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                     <div class="space-y-2">
                         <template x-if="!isWaitingList">
                             <button @click="tahanTransaksi()" :disabled="cart.length === 0 || processing"
-                                class="w-full btn justify-center py-2 border border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 shrink-0">
-                                <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                                class="w-full btn justify-center py-2 border border-sky-300 text-sky-700 bg-sky-50 hover:bg-sky-100 disabled:opacity-50 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 shrink-0">
+                                <svg class="w-4 h-4 text-sky-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 3h12v18l-3-2-3 2-3-2-3 2V3zm3 5h6M9 11h6M9 14h3"/>
                                 </svg>
                                 <span>Tahan Transaksi &mdash; layani pelanggan berikutnya</span>
@@ -1289,7 +1357,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
 
                         <button @click="checkout()" :disabled="cart.length === 0 || processing"
                             class="w-full btn justify-center py-3.5 text-base font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
-                            :class="isWaitingList ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'btn-primary bg-green-600 hover:bg-green-700 text-white'">
+                            :class="isWaitingList ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'btn-primary bg-emerald-600 hover:bg-emerald-700 text-white'">
                             <span x-show="!processing && !isWaitingList">Bayar &amp; Cetak Struk</span>
                             <span x-show="!processing && isWaitingList" x-text="modePesanan === 'dp' ? 'Simpan Sebagai Pesanan (DP)' : 'Simpan Sebagai Pesanan (Tanpa DP)'"></span>
                             <span x-show="processing">Memproses...</span>
@@ -1371,7 +1439,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                 @else
                 <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex items-center justify-between text-xs text-slate-600">
                     <span class="flex items-center gap-1.5 font-medium">
-                        <svg class="w-4 h-4 text-green-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         Waktu Buka Shift:
                     </span>
                     <span class="font-semibold text-slate-800 bg-white border px-2 py-0.5 rounded shadow-2xs">
@@ -1394,7 +1462,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                     <label class="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
                         <span>Modal Awal Uang Laci (Opening Cash Float) <span class="text-red-500">*</span></span>
                         @if(($shiftKasirSettings['starting_cash_mode'] ?? 'fixed') === 'last_closing')
-                            <span class="text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">Ikuti Kas Terakhir</span>
+                            <span class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">Ikuti Kas Terakhir</span>
                         @endif
                     </label>
                     <div class="flex items-stretch rounded-lg border border-slate-300 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100 bg-white overflow-hidden shadow-2xs">
@@ -1402,11 +1470,11 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                         <input type="number" name="starting_cash" required
                                min="{{ !empty($shiftKasirSettings['require_positive_starting_cash']) ? 1 : 0 }}"
                                value="{{ (int) ($defaultStartingCash ?? 0) }}"
-                               step="100" placeholder="0" autofocus
+                               step="any" placeholder="0" autofocus
                                class="w-full py-2 px-3 text-sm font-bold text-slate-900 border-0 focus:ring-0 font-mono">
                     </div>
                     @if(($shiftKasirSettings['starting_cash_mode'] ?? 'fixed') === 'last_closing')
-                        <p class="text-[11px] text-green-600 font-medium mt-1">
+                        <p class="text-[11px] text-emerald-600 font-medium mt-1">
                             💡 Otomatis mengambil sisa kas fisik dari shift terakhir: Rp {{ number_format($defaultStartingCash ?? 0, 0, ',', '.') }}
                         </p>
                     @else
@@ -1440,7 +1508,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
              @click.outside="showTutupShiftModal = false">
             <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
                 <h3 class="font-bold text-base text-slate-800 flex items-center gap-2">
-                    <span class="w-3 h-3 rounded-full bg-green-500"></span>
+                    <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
                     <span>Tutup Shift Kasir #<span x-text="tutupShiftData.shift?.id || activeShiftId"></span></span>
                 </h3>
                 <button type="button" @click="showTutupShiftModal = false" class="text-slate-400 hover:text-slate-600 text-lg font-bold">&times;</button>
@@ -1477,7 +1545,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                         @endif
                         <div class="flex justify-between text-slate-600">
                             <span>(+) Penjualan Tunai:</span>
-                            <span class="font-mono font-bold text-green-700">+ Rp <span x-text="formatRupiahKasir(tutupShiftData.summary.cash_sales)"></span></span>
+                            <span class="font-mono font-bold text-emerald-700">+ Rp <span x-text="formatRupiahKasir(tutupShiftData.summary.cash_sales)"></span></span>
                         </div>
                         <div class="flex justify-between text-slate-600">
                             <span>(+) Penjualan Non-Tunai:</span>
@@ -1492,12 +1560,12 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                         @if($cashDrawerEnabled)
                         <div class="pt-2 border-t border-slate-200 flex justify-between text-slate-900 font-bold text-sm">
                             <span>Uang Seharusnya di Laci:</span>
-                            <span class="font-mono text-green-800">Rp <span x-text="formatRupiahKasir(tutupShiftData.summary.expected_cash)"></span></span>
+                            <span class="font-mono text-emerald-800">Rp <span x-text="formatRupiahKasir(tutupShiftData.summary.expected_cash)"></span></span>
                         </div>
                         @else
                         <div class="pt-2 border-t border-slate-200 flex justify-between text-slate-900 font-bold text-sm">
                             <span>Total Penjualan Shift:</span>
-                            <span class="font-mono text-green-800">Rp <span x-text="formatRupiahKasir(tutupShiftData.summary.total_sales)"></span></span>
+                            <span class="font-mono text-emerald-800">Rp <span x-text="formatRupiahKasir(tutupShiftData.summary.total_sales)"></span></span>
                         </div>
                         @endif
                     </div>
@@ -1510,7 +1578,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                         </label>
                         <div class="flex items-stretch rounded-lg border border-slate-300 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100 bg-white overflow-hidden shadow-2xs">
                             <span class="inline-flex items-center px-3 bg-slate-100 text-slate-600 font-bold text-xs border-r border-slate-200 select-none">Rp</span>
-                            <input type="number" x-model.number="tutupUangFisikKasir" required min="0" step="100" placeholder="0"
+                            <input type="number" x-model.number="tutupUangFisikKasir" required min="0" step="any" placeholder="0"
                                    class="w-full py-2.5 px-3 text-base font-bold font-mono text-slate-900 border-0 focus:ring-0">
                         </div>
                     </div>
@@ -1535,7 +1603,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
 
                     <div class="flex items-center justify-end gap-2 pt-2">
                         <button type="button" @click="showTutupShiftModal = false" class="btn btn-outline text-xs">Batal</button>
-                        <button type="button" @click="submitTutupShift()" class="btn btn-primary bg-green-600 hover:bg-green-700 text-white font-bold text-xs px-4 py-2">
+                        <button type="button" @click="submitTutupShift()" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2">
                             Tutup Shift &amp; Cetak Laporan
                         </button>
                     </div>
@@ -1569,6 +1637,23 @@ function kasirApp() {
         // Bentuk dokumen yang akan dicetak sesudah bayar. Nilai awalnya dari Pengaturan.
         dokumenCetak: @json($dokumenDefault ?? 'struk'),
         customerId: '',
+        customerTypesById: @json($customers->pluck('customer_type', 'id')),
+
+        customerType() {
+            if (!this.customerId) return 'UMUM';
+            return (this.customerTypesById[this.customerId] || 'UMUM').toUpperCase();
+        },
+
+        displayPrice(p) {
+            const tipe = this.customerType();
+            if (tipe === 'RESELLER' && p.reseller_price && Number(p.reseller_price) > 0) {
+                return Number(p.reseller_price);
+            }
+            if (tipe === 'GROSIR' && p.grosir_price && Number(p.grosir_price) > 0) {
+                return Number(p.grosir_price);
+            }
+            return Number(p.sell_price);
+        },
         discount: 0,
         paymentMethod: 'tunai',
         paidAmount: 0,
@@ -1593,6 +1678,33 @@ function kasirApp() {
         activeShiftId: {{ $activeShift ? $activeShift->id : 'null' }},
         showBukaShiftModal: false,
         showTutupShiftModal: false,
+
+        // Panel Keranjang Fleksibel (Resizable Splitter & Preset)
+        cartWidth: parseInt(localStorage.getItem('jpos_kasir_cart_w')) || 432,
+        isResizing: false,
+        setCartPreset(w) {
+            this.cartWidth = w;
+            localStorage.setItem('jpos_kasir_cart_w', w);
+        },
+        startCartResize(e) {
+            this.isResizing = true;
+            const startX = e.clientX;
+            const startW = this.cartWidth;
+            const onMouseMove = (ev) => {
+                if (!this.isResizing) return;
+                const delta = startX - ev.clientX; // menggeser ke kiri memperlebar keranjang
+                const newW = Math.max(360, Math.min(Math.round(window.innerWidth * 0.55), startW + delta));
+                this.cartWidth = newW;
+                localStorage.setItem('jpos_kasir_cart_w', newW);
+            };
+            const onMouseUp = () => {
+                this.isResizing = false;
+                window.removeEventListener('mousemove', onMouseMove);
+                window.removeEventListener('mouseup', onMouseUp);
+            };
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+        },
         shiftLoading: false,
         tutupShiftData: {},
         tutupUangFisikKasir: 0,
@@ -1817,6 +1929,8 @@ function kasirApp() {
                         catatan.push(`Harga "${item.name}" diperbarui dari Rp ${this.formatNumber(item.sell_price)} ke Rp ${this.formatNumber(live.sell_price)}.`);
                         item.sell_price = live.sell_price;
                     }
+                    item.reseller_price = live.reseller_price;
+                    item.grosir_price = live.grosir_price;
                     item.stock = live.stock;
                     item.image_url = live.image_url;
                     keranjangValid.push(item);
@@ -1831,6 +1945,8 @@ function kasirApp() {
                         catatan.push(`Harga "${item.name}" (${unitLive.unit_name}) diperbarui.`);
                         item.sell_price = unitLive.price;
                     }
+                    item.reseller_price = (unitLive.reseller_price !== null && unitLive.reseller_price !== undefined && unitLive.reseller_price !== '') ? unitLive.reseller_price : null;
+                    item.grosir_price = (unitLive.grosir_price !== null && unitLive.grosir_price !== undefined && unitLive.grosir_price !== '') ? unitLive.grosir_price : null;
                     item.stock = live.stock;
                     item.image_url = live.image_url;
                     keranjangValid.push(item);
@@ -1939,6 +2055,10 @@ function kasirApp() {
         addToCartWithUnit(p, unitType) {
             let unitLabel = p.unit || 'pcs';
             let sellPrice = p.sell_price;
+            let resellerPrice = p.reseller_price;
+            let grosirPrice = p.grosir_price;
+            let wholesalePrice = p.wholesale_price;
+            let wholesaleMinQty = p.wholesale_min_qty;
             let unitConversion = 1;
             let isWeighable = !!p.is_weighable;
 
@@ -1948,6 +2068,10 @@ function kasirApp() {
                 if (u) {
                     unitLabel = u.unit_name;
                     sellPrice = u.price;
+                    resellerPrice = (u.reseller_price !== null && u.reseller_price !== undefined && u.reseller_price !== '') ? u.reseller_price : null;
+                    grosirPrice = (u.grosir_price !== null && u.grosir_price !== undefined && u.grosir_price !== '') ? u.grosir_price : null;
+                    wholesalePrice = u.wholesale_price;
+                    wholesaleMinQty = u.wholesale_min_qty;
                     unitConversion = u.conversion;
                     isWeighable = !!u.is_weighable;
                 }
@@ -1976,8 +2100,10 @@ function kasirApp() {
                     unit_type: unitType,
                     unit_conversion: unitConversion,
                     sell_price: sellPrice,
-                    wholesale_price: p.wholesale_price,
-                    wholesale_min_qty: p.wholesale_min_qty,
+                    reseller_price: resellerPrice,
+                    grosir_price: grosirPrice,
+                    wholesale_price: wholesalePrice,
+                    wholesale_min_qty: wholesaleMinQty,
                     stock: p.stock,
                     base_unit: p.unit || 'pcs',
                     type: p.type,
@@ -2050,17 +2176,40 @@ function kasirApp() {
         },
 
         isWholesaleActive(item) {
+            const tipe = this.customerType();
+            if (tipe === 'RESELLER' && item.reseller_price && Number(item.reseller_price) > 0) return false;
+            if (tipe === 'GROSIR' && item.grosir_price && Number(item.grosir_price) > 0) return false;
+
             if (!item.wholesale_price || !item.wholesale_min_qty) return false;
-            // Harga grosir hanya berlaku untuk satuan dasar
-            if (item.unit_type !== 'base') return false;
             return item.qty >= item.wholesale_min_qty;
         },
 
         linePrice(item) {
+            const tipe = this.customerType();
+            if (tipe === 'RESELLER' && item.reseller_price && Number(item.reseller_price) > 0) {
+                return Number(item.reseller_price);
+            }
+            if (tipe === 'GROSIR' && item.grosir_price && Number(item.grosir_price) > 0) {
+                return Number(item.grosir_price);
+            }
             if (this.isWholesaleActive(item)) {
                 return Number(item.wholesale_price);
             }
             return Number(item.sell_price);
+        },
+
+        activeTierBadge(item) {
+            const tipe = this.customerType();
+            if (tipe === 'RESELLER' && item.reseller_price && Number(item.reseller_price) > 0) {
+                return { label: 'Reseller', class: 'bg-blue-100 text-blue-700' };
+            }
+            if (tipe === 'GROSIR' && item.grosir_price && Number(item.grosir_price) > 0) {
+                return { label: 'Grosir', class: 'bg-amber-100 text-amber-700' };
+            }
+            if (this.isWholesaleActive(item)) {
+                return { label: 'Grosir Qty', class: 'bg-green-100 text-green-700' };
+            }
+            return null;
         },
 
         subtotal() {

@@ -15,7 +15,17 @@
 
             <template x-if="sale">
                 <div class="mt-4 border-t pt-4">
-                    <div class="text-sm mb-2"><span class="font-medium" x-text="sale.invoice_no"></span> &middot; <span x-text="sale.created_at"></span></div>
+                    <div class="text-sm mb-2">
+                        <span class="font-medium" x-text="sale.invoice_no"></span> &middot; <span x-text="sale.created_at"></span>
+                        <template x-if="sale.customer_name">
+                            <span class="text-slate-500"> &middot; <span x-text="sale.customer_name"></span></span>
+                        </template>
+                        <template x-if="sale.customer_type && sale.customer_type.toUpperCase() !== 'UMUM'">
+                            <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                                :class="sale.customer_type.toUpperCase() === 'RESELLER' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'"
+                                x-text="sale.customer_type"></span>
+                        </template>
+                    </div>
 
                     <div class="text-xs font-semibold text-slate-500 mb-1">Item Saat Ini (isi qty untuk retur)</div>
                     <div class="space-y-2">
@@ -52,7 +62,7 @@
                                 <template x-for="p in filteredProducts" :key="p.id">
                                     <button type="button" @click="onProductClick(p)" class="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b last:border-b-0 flex justify-between">
                                         <span x-text="p.name"></span>
-                                        <span class="text-slate-400" x-text="'Rp ' + formatNumber(p.sell_price)"></span>
+                                        <span class="text-slate-400" x-text="'Rp ' + formatNumber(displayPrice(p))"></span>
                                     </button>
                                 </template>
                                 <template x-if="filteredProducts.length === 0">
@@ -68,7 +78,7 @@
                                             <img :src="p.image_url" class="w-full h-full object-cover">
                                         </div>
                                         <div class="text-[11px] font-medium truncate" x-text="p.name"></div>
-                                        <div class="text-[10px] text-slate-400" x-text="'Rp ' + formatNumber(p.sell_price)"></div>
+                                        <div class="text-[10px] text-slate-400" x-text="'Rp ' + formatNumber(displayPrice(p))"></div>
                                     </button>
                                 </template>
                                 <template x-if="filteredProducts.length === 0">
@@ -133,7 +143,7 @@
                 <div class="space-y-2 max-h-[50vh] overflow-y-auto">
                     <button @click="chooseUnit('base')" class="w-full flex justify-between items-center border rounded-lg px-4 py-3 hover:bg-slate-50">
                         <span class="uppercase text-sm font-medium" x-text="unitPickerProduct ? (unitPickerProduct.unit || 'pcs') : ''"></span>
-                        <span class="font-semibold text-blue-600" x-text="unitPickerProduct ? 'Rp ' + formatNumber(unitPickerProduct.sell_price) : ''"></span>
+                        <span class="font-semibold text-blue-600" x-text="unitPickerProduct ? 'Rp ' + formatNumber(displayPrice(unitPickerProduct)) : ''"></span>
                     </button>
                     <template x-for="u in (unitPickerProduct ? unitPickerProduct.additional_units : [])" :key="u.id">
                         <button @click="chooseUnit('unit_' + u.id)" class="w-full flex justify-between items-center border rounded-lg px-4 py-3 hover:bg-slate-50">
@@ -141,7 +151,7 @@
                                 <span x-text="u.unit_name"></span>
                                 <span class="text-slate-400 font-normal" x-text="'(isi ' + formatQty(u.conversion) + ' ' + (unitPickerProduct.unit || 'pcs') + ')'"></span>
                             </span>
-                            <span class="font-semibold text-blue-600" x-text="'Rp ' + formatNumber(u.price)"></span>
+                            <span class="font-semibold text-blue-600" x-text="'Rp ' + formatNumber(displayUnitPrice(u))"></span>
                         </button>
                     </template>
                 </div>
@@ -218,8 +228,34 @@ function returApp() {
             this.productSearch = '';
         },
 
+        customerType() {
+            return (this.sale && this.sale.customer_type ? this.sale.customer_type : 'UMUM').toUpperCase();
+        },
+
+        displayPrice(p) {
+            const tipe = this.customerType();
+            if (tipe === 'RESELLER' && p.reseller_price && Number(p.reseller_price) > 0) {
+                return Number(p.reseller_price);
+            }
+            if (tipe === 'GROSIR' && p.grosir_price && Number(p.grosir_price) > 0) {
+                return Number(p.grosir_price);
+            }
+            return Number(p.sell_price);
+        },
+
+        displayUnitPrice(u) {
+            const tipe = this.customerType();
+            if (tipe === 'RESELLER' && u.reseller_price && Number(u.reseller_price) > 0) {
+                return Number(u.reseller_price);
+            }
+            if (tipe === 'GROSIR' && u.grosir_price && Number(u.grosir_price) > 0) {
+                return Number(u.grosir_price);
+            }
+            return Number(u.price);
+        },
+
         pushAddItem(p, unitType) {
-            let price = p.sell_price, unitLabel = null;
+            let price = this.displayPrice(p), unitLabel = null;
             if (unitType !== 'base') {
                 const unitId = parseInt(unitType.substring(5));
                 const pu = (p.additional_units || []).find(u => u.id === unitId);
@@ -227,7 +263,7 @@ function returApp() {
                     this.errorMsg = `Satuan yang dipilih untuk ${p.name} tidak ditemukan.`;
                     return;
                 }
-                price = pu.price;
+                price = this.displayUnitPrice(pu);
                 unitLabel = pu.unit_name;
             }
             this.addItems.push({ product_id: p.id, name: p.name, unit_type: unitType, unit_label: unitLabel, price: price, qty: 1 });

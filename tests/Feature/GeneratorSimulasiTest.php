@@ -25,6 +25,7 @@ use Tests\JposTestCase;
 class GeneratorSimulasiTest extends JposTestCase
 {
     private string $tujuan;
+    private ?\PDO $db = null;
 
     protected function setUp(): void
     {
@@ -35,7 +36,14 @@ class GeneratorSimulasiTest extends JposTestCase
 
     protected function tearDown(): void
     {
-        @unlink($this->tujuan);
+        $this->db = null;
+        gc_collect_cycles();
+
+        foreach ([$this->tujuan, $this->tujuan . '-wal', $this->tujuan . '-shm', $this->tujuan . '-journal'] as $f) {
+            if (file_exists($f)) {
+                @unlink($f);
+            }
+        }
 
         parent::tearDown();
     }
@@ -43,6 +51,9 @@ class GeneratorSimulasiTest extends JposTestCase
     /** @return \PDO koneksi ke database simulasi yang baru dibuat */
     private function buatSimulasi(): \PDO
     {
+        $this->db = null;
+        gc_collect_cycles();
+
         $kode = Artisan::call('jpos:generate-masif-db', [
             '--skala' => 'kecil',
             '--tujuan' => $this->tujuan,
@@ -51,7 +62,9 @@ class GeneratorSimulasiTest extends JposTestCase
         $this->assertSame(0, $kode, "Pembuatan database simulasi gagal:\n" . Artisan::output());
         $this->assertFileExists($this->tujuan);
 
-        return new \PDO('sqlite:' . $this->tujuan);
+        $this->db = new \PDO('sqlite:' . $this->tujuan);
+
+        return $this->db;
     }
 
     private function hitung(\PDO $db, string $tabel): int

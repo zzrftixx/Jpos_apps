@@ -272,6 +272,9 @@ class MetodePembayaranTest extends JposTestCase
 
         $this->assertStringContainsString('Uang Masuk per Metode', $html);
         $this->assertStringContainsString('QRIS', $html);
+        $this->assertStringContainsString('Total Semua Metode', $html);
+        $this->assertStringContainsString('metode=tunai#tabel-transaksi', $html);
+        $this->assertStringContainsString('metode=qris#tabel-transaksi', $html);
     }
 
     /** Transaksi batal tidak dihitung sebagai uang masuk - uangnya sudah kembali. */
@@ -326,9 +329,9 @@ class MetodePembayaranTest extends JposTestCase
             'paid_amount' => 500000, 'payment_method' => 'tunai', 'is_waiting_list' => true,
         ])->assertOk();
 
-        // Dibatalkan 3.000.000
+        // Dibatalkan 4.000.000
         $this->actingAs($this->kasir)->postJson('/kasir', [
-            'items' => [['product_id' => $p->id, 'qty' => 3]],
+            'items' => [['product_id' => $p->id, 'qty' => 4]],
             'paid_amount' => 700000, 'payment_method' => 'tunai', 'is_waiting_list' => true,
         ])->assertOk();
         $batal = \App\Models\Sale::latest('id')->firstOrFail();
@@ -339,12 +342,14 @@ class MetodePembayaranTest extends JposTestCase
         $this->assertStringContainsString('Rincian Seluruh Transaksi', $html);
         $this->assertStringContainsString('Rp 1.000.000', $html, 'Nilai lunas tidak tampil.');
         $this->assertStringContainsString('Rp 2.000.000', $html, 'Nilai pesanan belum lunas tidak tampil.');
-        $this->assertStringContainsString('Rp 3.000.000', $html, 'Nilai transaksi batal tidak tampil.');
 
-        // Mengikuti [U-038] di 2.11.5: kotak Dibatalkan dihilangkan dari rincian dan
-        // jumlahnya adalah penjumlahan kedua status (Lunas & Belum Lunas = 3.000.000).
-        $this->assertStringContainsString('Rp 3.000.000', $html,
-            'Jumlah kedua status (lunas & tunggu) tidak dihitungkan - pemilik toko masih harus pakai kalkulator.');
+        // Transaksi batal tidak dilaporkan dan tidak dihitung ke total (hanya 1jt + 2jt = 3jt, bukan 7jt)
+        $this->assertStringNotContainsString('Rp 4.000.000', $html, 'Nilai transaksi batal seharusnya tidak tampil.');
+        $this->assertStringContainsString('Rp 3.000.000', $html, 'Total transaksi berjalan seharusnya Rp 3.000.000.');
+        $this->assertStringNotContainsString('Rp 7.000.000', $html, 'Transaksi batal tidak boleh masuk ke perhitungan.');
+
+        $tabelHtml = substr($html, strpos($html, 'id="tabel-transaksi"'));
+        $this->assertStringNotContainsString($batal->invoice_no, $tabelHtml, 'Invoice transaksi batal tidak boleh dilaporkan di tabel.');
     }
 
     /** Omset resmi TIDAK ikut berubah oleh rincian baru itu - ia tetap hanya yang lunas. */

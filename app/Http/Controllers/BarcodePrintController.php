@@ -26,10 +26,21 @@ class BarcodePrintController extends Controller
         // Penyaring dipakai dua kali - untuk halaman yang tampil dan untuk daftar "pilih
         // semua" - jadi ditulis sekali di sini. Sebelumnya `orWhere` tidak dikelompokkan,
         // sehingga pada query yang punya kondisi lain hasilnya bisa bocor.
-        $saring = fn ($q) => $q->when($request->q, fn ($w) => $w->where(fn ($g) => $g
-            ->where('name', 'like', "%{$request->q}%")
-            ->orWhere('barcode', 'like', "%{$request->q}%")
-            ->orWhere('sku', 'like', "%{$request->q}%")));
+        $saring = fn ($q) => $q->when($request->q, function ($w) use ($request) {
+            $term = trim((string) $request->q);
+            $altTerm = ltrim($term, '0');
+            $w->where(function ($g) use ($term, $altTerm) {
+                $g->where('name', 'like', "%{$term}%")
+                    ->orWhere('barcode', 'like', "%{$term}%")
+                    ->orWhere('sku', 'like', "%{$term}%")
+                    ->orWhereHas('units', fn ($uq) => $uq->where('barcode', 'like', "%{$term}%"));
+
+                if ($altTerm !== '' && $altTerm !== $term) {
+                    $g->orWhere('barcode', 'like', "%{$altTerm}%")
+                        ->orWhereHas('units', fn ($uq) => $uq->where('barcode', 'like', "%{$altTerm}%"));
+                }
+            });
+        });
 
         $products = Product::with('units.unit')
             ->tap($saring)

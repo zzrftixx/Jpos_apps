@@ -82,25 +82,56 @@
     $seimbang = abs($posisi->selisih) < 0.01;
 @endphp
 
-{{-- Baris selisih tetap ditampilkan walau seharusnya nol. Menyembunyikannya justru membuat
-     kesalahan pencatatan tidak pernah ketahuan. --}}
-<div class="card p-4 mb-4 {{ $seimbang ? 'border-l-4 border-green-500' : 'border-l-4 border-red-500' }}">
+{{-- Baris status neraca: Hijau jika seimbang, Merah dengan Tombol Aksi Langsung jika belum seimbang --}}
+<div class="card p-4 sm:p-5 mb-4 {{ $seimbang ? 'border-l-4 border-green-500 bg-green-50/20' : 'border-l-4 border-red-500 bg-red-50/20' }}">
     @if($seimbang)
-        <p class="text-sm font-semibold text-green-700">Neraca seimbang.</p>
-        <p class="text-xs text-slate-500 mt-1">
-            Total aset sama persis dengan kewajiban ditambah modal. Semua yang ada di toko bisa
-            dijelaskan asal uangnya.
-        </p>
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-full bg-green-100 text-green-700 flex items-center justify-center shrink-0">
+                <svg width="20" height="20" style="width: 20px; height: 20px; min-width: 20px; flex-shrink: 0;" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <div>
+                <p class="text-sm font-bold text-green-800">Neraca seimbang.</p>
+                <p class="text-xs text-slate-500 mt-0.5">
+                    Total aset sama persis dengan kewajiban ditambah modal. Semua yang ada di toko bisa dijelaskan asal uangnya.
+                </p>
+            </div>
+        </div>
     @else
-        <p class="text-sm font-semibold text-red-700">
-            Belum seimbang &mdash; selisih {{ $rp(abs($posisi->selisih)) }}
-        </p>
-        <p class="text-xs text-slate-500 mt-1">
-            Ada yang menggerakkan satu sisi saja. Penyebab yang paling sering:
-            stok disesuaikan lewat Master Produk tanpa dicatat sebagai Pembelian,
-            saldo awal kas atau modal awal belum diisi dengan benar,
-            atau ada peralatan toko yang belum didaftarkan sebagai aset tetap.
-        </p>
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-600 font-bold text-xs">!</span>
+                    <p class="text-sm sm:text-base font-bold text-red-700">
+                        Neraca Belum Seimbang &mdash; Selisih {{ $rp(abs($posisi->selisih)) }}
+                    </p>
+                </div>
+                <p class="text-xs text-slate-600 leading-relaxed max-w-2xl">
+                    Penyebab paling umum: produk dan stok diinput langsung di Master Produk sehingga nilai persediaan belum memiliki pos modal awal penyeimbang.
+                </p>
+            </div>
+
+            @if($saranModalAwal > 0)
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2.5 shrink-0">
+                    <form method="POST" action="{{ route('laporan.neraca.pembukuan') }}" class="inline">
+                        @csrf
+                        <input type="hidden" name="tanggal_mulai" value="{{ $atur['tanggal_mulai'] ?? now()->startOfYear()->toDateString() }}">
+                        <input type="hidden" name="saldo_awal_kas" value="{{ (int) ($atur['saldo_awal_kas'] ?? 0) }}">
+                        <input type="hidden" name="modal_awal" value="{{ (int) $saranModalAwal }}">
+                        <button type="submit"
+                                class="h-10 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs sm:text-sm inline-flex items-center justify-center gap-2 shadow-md transition select-none cursor-pointer whitespace-nowrap"
+                                title="Klik untuk otomatis menyesuaikan modal awal toko agar neraca langsung seimbang">
+                            <svg width="18" height="18" style="width: 18px; height: 18px; min-width: 18px; flex-shrink: 0;" class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>Seimbangkan Neraca Otomatis (Rp {{ number_format($saranModalAwal, 0, ',', '.') }})</span>
+                        </button>
+                    </form>
+                    <a href="#titik-awal-pembukuan" class="text-xs text-slate-500 hover:text-slate-800 underline text-center sm:text-left whitespace-nowrap">
+                        Atur Manual &darr;
+                    </a>
+                </div>
+            @endif
+        </div>
     @endif
 </div>
 
@@ -282,7 +313,7 @@
 
 {{-- ============================================================== TUTUP BUKU --}}
 <div class="grid gap-4 lg:grid-cols-2">
-    <div class="card p-6">
+    <div class="card p-6" id="titik-awal-pembukuan">
         <h3 class="font-semibold mb-1">Titik Awal Pembukuan</h3>
         <p class="text-xs text-slate-400 mb-4">
             Dari kapan neraca dihitung, dan berapa yang sudah ada saat itu.

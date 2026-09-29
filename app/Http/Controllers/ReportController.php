@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CashierShift;
 use App\Models\CashTransaction;
+use App\Models\Category;
 use App\Models\FixedAsset;
 use App\Models\NeracaSnapshot;
 use App\Models\Product;
@@ -28,11 +29,13 @@ class ReportController extends Controller
         $to = $request->to ?: now()->toDateString();
 
         $metode = in_array($request->metode, MetodeBayar::kunci(), true) ? $request->metode : null;
+        $status = in_array($request->order_status, ['completed', 'waiting'], true) ? $request->order_status : null;
 
         $sales = Sale::with(['customer', 'cashier', 'payments'])
             ->whereDate('created_at', '>=', $from)
             ->whereDate('created_at', '<=', $to)
-            ->when($request->order_status, fn($q) => $q->where('order_status', $request->order_status))
+            ->where('order_status', '<>', 'cancelled')
+            ->when($status, fn($q) => $q->where('order_status', $status))
             ->when($metode, fn($q) => $q->whereHas('payments', fn($p) => $p->where('method', $metode)))
             ->orderByDesc('created_at')
             ->paginate(20)
@@ -71,18 +74,11 @@ class ReportController extends Controller
             ->pluck('nilai', 'method')
             ->all();
 
-        // RINCIAN PER STATUS - supaya pemilik toko tidak perlu kalkulator.
-        //
-        // Diminta langsung oleh pemilik toko: "kalau aku pengin tahu ya harus hitung manual
-        // dong mas, harus kalkulator". Ia benar. Sebelum ini, untuk tahu ke mana perginya
-        // selisih antara angka lama dan angka sekarang, ia harus menyaring status satu per
-        // satu lalu menjumlahkan barisnya sendiri - dan kotak ringkasan di atas SENGAJA
-        // tidak ikut berubah saat disaring, karena ia memang khusus menghitung omset (H5).
-        //
-        // Sebuah penjelasan yang benar tapi memaksa orang membuka kalkulator sama saja
-        // dengan tidak menjelaskan. Satu query dikelompokkan, bukan tiga (B1).
+        // RINCIAN PER STATUS - hanya transaksi aktif (selesai dan menunggu DP).
+        // Transaksi yang dibatalkan tidak dilaporkan dan tidak dihitung ke total.
         $rincianStatus = Sale::whereDate('created_at', '>=', $from)
             ->whereDate('created_at', '<=', $to)
+            ->where('order_status', '<>', 'cancelled')
             ->selectRaw('order_status, COUNT(*) as jumlah, SUM(total) as nilai')
             ->groupBy('order_status')
             ->get()
@@ -94,9 +90,9 @@ class ReportController extends Controller
     }
 
     /**
-     * Laporan Transaksi per Shift Kasir.
+     * Laporan Transaksi per Shift.
      *
-     * Menampilkan rekapitulasi sesi kasir lengkap dengan ringkasan transaksi
+     * Menampilkan rekapitulasi shift kasir dan seluruh rincian transaksi penjualan
      * yang terjadi di dalam masing-masing sesi shift tersebut.
      */
     public function shift(Request $request)
@@ -220,6 +216,75 @@ class ReportController extends Controller
             ->withQueryString();
 
         return view('laporan.stok-detail', compact('product', 'movements', 'from', 'to'));
+    }
+
+    /**
+     * Laporan Rekap Mutasi Stok (Akumulasi Kulakan Masuk vs Penjualan Keluar vs Sisa Stok).
+     *
+     * Menghitung total stok masuk (dari purchase_items) dan total stok keluar (dari sale_items
+     * berstatus completed) dalam rentang periode yang dipilih.
+     * Menggunakan subquery terisolasi untuk mencegah Cartesian product (B1).
+     */
+    public function mutasiStok(Request $request)
+    {
+        $from = $request->from ?: now()->startOfMonth()->toDateString();
+        $to = $request->to ?: now()->toDateString();
+
+        $beliSub = DB::table('purchase_items')
+            ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
+            ->whereDate('purchases.purchase_date', '>=', $from)
+            ->whereDate('purchases.purchase_date', '<=', $to)
+            ->select('purchase_items.product_id', DB::raw('SUM(purchase_items.qty * COALESCE(purchase_items.unit_conversion, 1)) as total_beli'))
+            ->groupBy('purchase_items.product_id');
+
+        $jualSub = DB::table('sale_items')
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->where('sales.order_status', '=', 'completed')
+            ->whereDate('sales.created_at', '>=', $from)
+            ->whereDate('sales.created_at', '<=', $to)
+            ->select('sale_items.product_id', DB::raw('SUM(sale_items.qty * COALESCE(sale_items.unit_conversion, 1)) as total_jual'))
+            ->groupBy('sale_items.product_id');
+
+        $query = Product::query()
+            ->with('category')
+            ->leftJoinSub($beliSub, 'beli', function ($join) {
+                $join->on('products.id', '=', 'beli.product_id');
+            })
+            ->leftJoinSub($jualSub, 'jual', function ($join) {
+                $join->on('products.id', '=', 'jual.product_id');
+            })
+            ->select(
+                'products.*',
+                DB::raw('COALESCE(beli.total_beli, 0) as total_masuk'),
+                DB::raw('COALESCE(jual.total_jual, 0) as total_keluar')
+            );
+
+        if ($request->filled('q')) {
+            $q = $request->q;
+            $query->where(function ($w) use ($q) {
+                $w->where('products.name', 'like', "%{$q}%")
+                  ->orWhere('products.barcode', 'like', "%{$q}%");
+            });
+        }
+
+        if ($request->filled('category_id')) {
+            $query->where('products.category_id', $request->category_id);
+        }
+
+        if ($request->boolean('hanya_ada_mutasi')) {
+            $query->where(function ($w) {
+                $w->where('beli.total_beli', '>', 0)
+                  ->orWhere('jual.total_jual', '>', 0);
+            });
+        }
+
+        $products = $query->orderBy('products.name')
+            ->paginate(20)
+            ->withQueryString();
+
+        $categories = Category::orderBy('name')->get();
+
+        return view('laporan.mutasi-stok', compact('products', 'categories', 'from', 'to'));
     }
 
     public function terlaris(Request $request)

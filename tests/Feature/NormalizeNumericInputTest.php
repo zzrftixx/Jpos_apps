@@ -232,4 +232,39 @@ class NormalizeNumericInputTest extends JposTestCase
         $this->assertSame(1.5, (float) $printer['margin']);
         $this->assertSame(11, (int) $printer['font_size']);
     }
+
+    public function test_normalisasi_input_harga_reseller_dan_grosir(): void
+    {
+        $unit = \App\Models\Unit::firstOrCreate(['name' => 'Karton']);
+
+        $this->actingAs($this->admin)
+            ->post('/master/produk', $this->payloadProduk([
+                'cost_price' => '8.000',
+                'sell_price' => '10.000',
+                'reseller_price' => '9.000',
+                'grosir_price' => '7.000',
+                'multi_unit_enabled' => '1',
+                'units' => [
+                    [
+                        'unit_id' => $unit->id,
+                        'ratio_to_previous' => '10',
+                        'price' => '95.000',
+                        'reseller_price' => '85.000',
+                        'grosir_price' => '1.500.000',
+                        'cost_price' => '75.000',
+                    ],
+                ],
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $produk = Product::firstOrFail();
+        $this->assertSame(10000.0, (float) $produk->sell_price);
+        $this->assertSame(9000.0, (float) $produk->reseller_price);
+        $this->assertSame(7000.0, (float) $produk->grosir_price);
+
+        $unitBaris = $produk->units()->firstOrFail();
+        $this->assertSame(95000.0, (float) $unitBaris->price);
+        $this->assertSame(85000.0, (float) $unitBaris->reseller_price);
+        $this->assertSame(1500000.0, (float) $unitBaris->grosir_price);
+    }
 }

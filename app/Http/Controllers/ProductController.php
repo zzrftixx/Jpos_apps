@@ -26,11 +26,21 @@ class ProductController extends Controller
     public function index(Request $request)
     {
         $filtered = fn() => Product::query()
-            ->when($request->q, fn($q) => $q->where(function ($sub) use ($request) {
-                $sub->where('name', 'like', "%{$request->q}%")
-                    ->orWhere('sku', 'like', "%{$request->q}%")
-                    ->orWhere('barcode', 'like', "%{$request->q}%");
-            }))
+            ->when($request->q, function ($q) use ($request) {
+                $term = trim((string) $request->q);
+                $altTerm = ltrim($term, '0');
+                $q->where(function ($sub) use ($term, $altTerm) {
+                    $sub->where('name', 'like', "%{$term}%")
+                        ->orWhere('sku', 'like', "%{$term}%")
+                        ->orWhere('barcode', 'like', "%{$term}%")
+                        ->orWhereHas('units', fn($uq) => $uq->where('barcode', 'like', "%{$term}%"));
+
+                    if ($altTerm !== '' && $altTerm !== $term) {
+                        $sub->orWhere('barcode', 'like', "%{$altTerm}%")
+                            ->orWhereHas('units', fn($uq) => $uq->where('barcode', 'like', "%{$altTerm}%"));
+                    }
+                });
+            })
             ->when($request->category_id, fn($q) => $q->where('category_id', $request->category_id))
             ->when($request->type, fn($q) => $q->where('type', $request->type));
 
@@ -275,6 +285,8 @@ class ProductController extends Controller
                 'conversion' => $running,
                 'sort_order' => $urutan,
                 'price' => $row['price'],
+                'reseller_price' => $row['reseller_price'] ?? null,
+                'grosir_price' => $row['grosir_price'] ?? null,
                 'cost_price' => $hargaModalBaris,
                 'modal_total' => $modal,
                 'biaya_lain' => $biaya,
@@ -446,6 +458,8 @@ class ProductController extends Controller
             'unit' => ['nullable', 'string', 'max:50'],
             'cost_price' => ['required', 'numeric', 'min:0'],
             'sell_price' => ['required', 'numeric', 'min:0'],
+            'reseller_price' => ['nullable', 'numeric', 'min:0'],
+            'grosir_price' => ['nullable', 'numeric', 'min:0'],
             'wholesale_price' => ['nullable', 'numeric', 'min:0', 'required_with:wholesale_min_qty'],
             'wholesale_min_qty' => ['nullable', 'integer', 'min:2', 'required_with:wholesale_price'],
             'multi_unit_enabled' => ['nullable', 'boolean'],
@@ -463,6 +477,8 @@ class ProductController extends Controller
             // satuan dasar - itu dihitung server di syncUnits().
             'units.*.ratio_to_previous' => ['required_with:units', 'numeric', 'min:0.0001'],
             'units.*.price' => ['required_with:units', 'numeric', 'min:0'],
+            'units.*.reseller_price' => ['nullable', 'numeric', 'min:0'],
+            'units.*.grosir_price' => ['nullable', 'numeric', 'min:0'],
             'units.*.cost_price' => ['nullable', 'numeric', 'min:0'],
             'units.*.allow_decimal' => ['nullable', 'boolean'],
             'units.*.wholesale_price' => ['nullable', 'numeric', 'min:0'],

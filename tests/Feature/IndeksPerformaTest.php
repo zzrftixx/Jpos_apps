@@ -31,6 +31,7 @@ class IndeksPerformaTest extends JposTestCase
             ['sale_return_items', 'sale_return_items_sale_return_id_index'],
             ['sale_return_items', 'sale_return_items_sale_item_id_index'],
             ['product_units', 'product_units_product_id_sort_order_index'],
+            ['sale_payments', 'sale_payments_user_created_idx'],
         ];
     }
 

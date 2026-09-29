@@ -298,7 +298,7 @@ $ExcludeSelalu = @(
 )
 
 function SalinBersih($sumber, $tujuan) {
-    robocopy $sumber $tujuan /E /NFL /NDL /NJH /NJS /NC /NS /NP /XF ".DS_Store" "Thumbs.db" | Out-Null
+    robocopy $sumber $tujuan /E /R:5 /W:2 /NFL /NDL /NJH /NJS /NC /NS /NP /XF ".DS_Store" "Thumbs.db" | Out-Null
     if ($LASTEXITCODE -ge 8) { Gagal "Gagal menyalin $sumber" }
 }
 
@@ -382,9 +382,17 @@ Tahap 6 "Memasang dependensi produksi ke dalam paket"
 # path RELATIF di dalam classmap, dihitung dari lokasi vendor saat autoloader dibuat.
 # Begitu vendor dipindahkan, seluruh path itu menunjuk ke luar folder aplikasi dan
 # Laravel gagal memuat AppServiceProvider - instalasi baru mati sebelum sempat menyala.
-& composer install --working-dir="$TargetDir" --no-dev --optimize-autoloader --classmap-authoritative --no-interaction
-if ($LASTEXITCODE -ne 0) { Gagal "composer install --no-dev gagal." }
-if (-not (Test-Path (Join-Path $TargetDir "vendor\autoload.php"))) { Gagal "vendor tidak terbentuk di dalam paket." }
+$composerSuccess = $false
+for ($attempt = 1; $attempt -le 3; $attempt++) {
+    & composer install --working-dir="$TargetDir" --no-dev --optimize-autoloader --classmap-authoritative --no-interaction
+    if ($LASTEXITCODE -eq 0 -and (Test-Path (Join-Path $TargetDir "vendor\autoload.php"))) {
+        $composerSuccess = $true
+        break
+    }
+    Write-Host "  Pemasangan dependensi tertahan sistem (percobaan $attempt/3), mencoba lagi dalam 2 detik..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 2
+}
+if (-not $composerSuccess) { Gagal "composer install --no-dev gagal." }
 
 Write-Host "  OK - vendor produksi terpasang (tanpa phpunit, faker, mockery, pint, pail, pao)" -ForegroundColor Green
 
@@ -459,6 +467,40 @@ endlocal
 "@
 Set-Content -Path (Join-Path $TargetDir "PULIHKAN-LOGIN.bat") -Value $PulihkanBat -Encoding ASCII
 Write-Host "  OK - PULIHKAN-LOGIN.bat disertakan" -ForegroundColor Green
+
+# Skrip pembuka port Windows Firewall untuk Akses Jaringan Multi-Kasir LAN.
+$FirewallBat = @"
+@echo off
+REM ===================================================================
+REM  JPOS - Buka Izin Windows Firewall untuk Akses LAN (Multi-Kasir)
+REM
+REM  Jalankan berkas ini dengan: KLIK KANAN -> "Run as administrator"
+REM  agar perangkat kasir lain (Komputer B, HP, Tablet) bisa membuka
+REM  aplikasi JPOS melalui jaringan Wi-Fi / kabel LAN lokal.
+REM ===================================================================
+setlocal
+echo.
+echo  ===================================================================
+echo    JPOS - Buka Izin Windows Firewall (Port 8000-8099)
+echo  ===================================================================
+echo.
+echo  Membuka izin port masuk TCP 8000-8099...
+netsh advfirewall firewall add rule name="JPOS Multi-Device LAN" dir=in action=allow protocol=TCP localport=8000-8099
+if %ERRORLEVEL% EQU 0 (
+    echo.
+    echo  [BERHASIL] Port 8000-8099 berhasil dibuka di Windows Firewall!
+    echo  Komputer kasir lain, HP, dan tablet sekarang bisa mengakses JPOS.
+) else (
+    echo.
+    echo  [GAGAL] Anda harus menjalankan berkas ini sebagai Administrator:
+    echo  Klik kanan berkas ini -> pilih "Run as administrator".
+)
+echo.
+pause
+endlocal
+"@
+Set-Content -Path (Join-Path $TargetDir "BUKA-FIREWALL-LAN.bat") -Value $FirewallBat -Encoding ASCII
+Write-Host "  OK - BUKA-FIREWALL-LAN.bat disertakan" -ForegroundColor Green
 
 # -----------------------------------------------------------------------------
 Tahap 8 "Mengompilasi JPOS.exe"
@@ -573,9 +615,10 @@ echo "ekspor-ok";
 # seperti itu adalah benar-benar menjalankan paketnya, persis seperti yang akan
 # dialami client saat pertama kali membuka aplikasi.
 $UjiDir = Join-Path $DistDir "_uji"
-if (Test-Path $UjiDir) { Remove-Item $UjiDir -Recurse -Force }
-robocopy $TargetDir $UjiDir /E /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
+if (Test-Path $UjiDir) { Remove-Item $UjiDir -Recurse -Force -ErrorAction SilentlyContinue }
+robocopy $TargetDir $UjiDir /E /R:5 /W:2 /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { Gagal "Gagal menyiapkan folder uji." }
+Start-Sleep -Seconds 2
 
 $UjiPhp = Join-Path $UjiDir "php\php.exe"
 
@@ -617,6 +660,12 @@ $PulihkanBatUji = Join-Path $UjiDir "PULIHKAN-LOGIN.bat"
 if (-not (Test-Path $PulihkanBatUji)) {
     Remove-Item $UjiDir -Recurse -Force -ErrorAction SilentlyContinue
     Gagal "PULIHKAN-LOGIN.bat tidak ikut terbawa ke paket."
+}
+
+$FirewallBatUji = Join-Path $UjiDir "BUKA-FIREWALL-LAN.bat"
+if (-not (Test-Path $FirewallBatUji)) {
+    Remove-Item $UjiDir -Recurse -Force -ErrorAction SilentlyContinue
+    Gagal "BUKA-FIREWALL-LAN.bat tidak ikut terbawa ke paket."
 }
 
 $pulih = & $UjiPhp (Join-Path $UjiDir "artisan") "jpos:pulihkan-login" "--user=admin" "--yakin" 2>&1 | Out-String
@@ -713,19 +762,20 @@ if (Test-Path $ZipFull) { Remove-Item $ZipFull -Force }
 #
 # Hanya berisi kode. database/ dan storage/app/ SENGAJA tidak disertakan sama
 # sekali, sehingga tidak ada cara file ini merusak data client.
-$UpdateDir = Join-Path $DistDir "_update"
-if (Test-Path $UpdateDir) { Remove-Item $UpdateDir -Recurse -Force }
-New-Item -ItemType Directory -Path $UpdateDir -Force | Out-Null
+$UpdatePack = Join-Path $DistDir "_updatepack"
+if (Test-Path $UpdatePack) { Remove-Item $UpdatePack -Recurse -Force -ErrorAction SilentlyContinue }
+$UpdateBaru = Join-Path $UpdatePack "_baru"
+New-Item -ItemType Directory -Path $UpdateBaru -Force | Out-Null
 
 foreach ($folder in @("app", "config", "lang", "public", "resources", "routes", "vendor", "database\migrations", "database\seeders")) {
     $src = Join-Path $TargetDir $folder
-    if (Test-Path $src) { SalinBersih $src (Join-Path $UpdateDir $folder) }
+    if (Test-Path $src) { SalinBersih $src (Join-Path $UpdateBaru $folder) }
 }
-foreach ($file in @("artisan", "server.php", "composer.json", "composer.lock", "VERSION", "README_JPOS.md", "JPOS.exe", "PULIHKAN-LOGIN.bat")) {
-    Copy-Item -Path (Join-Path $TargetDir $file) -Destination (Join-Path $UpdateDir $file) -Force
+foreach ($file in @("artisan", "server.php", "composer.json", "composer.lock", "VERSION", "README_JPOS.md", "JPOS.exe", "PULIHKAN-LOGIN.bat", "BUKA-FIREWALL-LAN.bat")) {
+    Copy-Item -Path (Join-Path $TargetDir $file) -Destination (Join-Path $UpdateBaru $file) -Force
 }
-New-Item -ItemType Directory -Path (Join-Path $UpdateDir "php") -Force | Out-Null
-Copy-Item -Path (Join-Path $PhpTarget "php.ini") -Destination (Join-Path $UpdateDir "php\php.ini") -Force
+New-Item -ItemType Directory -Path (Join-Path $UpdateBaru "php") -Force | Out-Null
+Copy-Item -Path (Join-Path $PhpTarget "php.ini") -Destination (Join-Path $UpdateBaru "php\php.ini") -Force
 
 $UpdateBat = @"
 @echo off
@@ -797,25 +847,6 @@ ping -n 3 127.0.0.1 >nul
 endlocal
 "@
 
-# Berkas baru diletakkan di subfolder _baru supaya UPDATE.bat bisa menyalinnya
-# tanpa pernah menyentuh database/ atau storage/app/.
-$UpdatePack = Join-Path $DistDir "_updatepack"
-if (Test-Path $UpdatePack) { Remove-Item $UpdatePack -Recurse -Force }
-New-Item -ItemType Directory -Path $UpdatePack -Force | Out-Null
-
-# SALIN, bukan Move-Item.
-#
-# Move-Item pada folder berisi ribuan berkas gagal seketika kalau ada SATU berkas
-# yang sedang dipegang proses lain - dan pemindai antivirus memang membuka berkas
-# yang baru saja ditulis, tepat di detik-detik ini. Kegagalannya muncul di tahap
-# terakhir, setelah sepuluh menit membangun, dan menyebut nama berkas acak yang
-# berbeda tiap kali sehingga terlihat seperti kerusakan yang tidak masuk akal.
-#
-# robocopy menunggu dan mencoba lagi (/R /W), jadi berkas yang sedang dipindai
-# cukup ditunggu sebentar alih-alih menggagalkan seluruh build.
-robocopy $UpdateDir (Join-Path $UpdatePack "_baru") /E /R:5 /W:2 /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
-if ($LASTEXITCODE -ge 8) { Gagal "Gagal menyiapkan paket update." }
-Remove-Item $UpdateDir -Recurse -Force -ErrorAction SilentlyContinue
 Set-Content -Path (Join-Path $UpdatePack "UPDATE.bat") -Value $UpdateBat -Encoding ASCII
 
 $ZipUpdate = Join-Path $DistDir "JPOS_Update_$Version.zip"
@@ -832,7 +863,19 @@ Get-ChildItem $DistDir -Filter "JPOS_Update_*.zip" -ErrorAction SilentlyContinue
         Write-Host "  Paket update versi lama dibuang: $($_.Name)" -ForegroundColor Yellow
         Remove-Item $_.FullName -Force
     }
-[System.IO.Compression.ZipFile]::CreateFromDirectory($UpdatePack, $ZipUpdate)
+Start-Sleep -Seconds 3
+
+# Kompresi dengan mekanisme coba-ulang jika pemindai antivirus sedang memindai berkas sementara.
+$maxRetries = 3
+for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+    try {
+        [System.IO.Compression.ZipFile]::CreateFromDirectory($UpdatePack, $ZipUpdate)
+        break
+    } catch {
+        if ($attempt -eq $maxRetries) { throw $_ }
+        Start-Sleep -Seconds 3
+    }
+}
 
 # --- Checksum ---
 $Sums = Join-Path $DistDir "SHA256SUMS.txt"
@@ -857,3 +900,12 @@ Write-Host "  Checksum       : $Sums"
 Write-Host ""
 Write-Host "  Paket update TIDAK menyentuh database maupun gambar produk client." -ForegroundColor Cyan
 Write-Host ""
+
+# Sinkronisasi otomatis ke folder distribusi khusus klien petshop
+$PetshopDir = Join-Path $DistDir "KASIR CLIENT PETSHOP"
+if (Test-Path $PetshopDir) {
+    Write-Host "  Menyalin paket portabel ke: $PetshopDir" -ForegroundColor Yellow
+    Copy-Item -Path "$TargetDir\*" -Destination $PetshopDir -Recurse -Force
+    Write-Host "  OK - dist/KASIR CLIENT PETSHOP siap disalin ke komputer klien" -ForegroundColor Green
+}
+

@@ -29,7 +29,6 @@
             <option value="">Semua</option>
             <option value="completed" {{ request('order_status') == 'completed' ? 'selected' : '' }}>Lunas / Selesai</option>
             <option value="waiting" {{ request('order_status') == 'waiting' ? 'selected' : '' }}>Menunggu DP</option>
-            <option value="cancelled" {{ request('order_status') == 'cancelled' ? 'selected' : '' }}>Dibatalkan</option>
         </select>
     </div>
     <div>
@@ -44,7 +43,7 @@
     <button class="btn btn-primary">Terapkan</button>
 </form>
 
-<p class="text-xs text-slate-400 -mt-2 mb-4">* Ringkasan di bawah hanya menghitung transaksi berstatus Lunas/Selesai (tidak termasuk pesanan yang masih DP atau dibatalkan).</p>
+<p class="text-xs text-slate-400 -mt-2 mb-4">* Ringkasan hanya menghitung transaksi aktif (transaksi yang dibatalkan tidak dimasukkan dalam perhitungan dan tidak dilaporkan).</p>
 
 <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
     <div class="card p-4"><div class="text-xs text-slate-500">Jumlah Transaksi</div><div class="text-xl font-bold">{{ $summary->trx_count ?? 0 }}</div></div>
@@ -53,51 +52,42 @@
     <div class="card p-4"><div class="text-xs text-slate-500">Total Pajak</div><div class="text-xl font-bold">Rp {{ number_format($summary->total_tax ?? 0, 0, ',', '.') }}</div></div>
 </div>
 
-{{-- RINCIAN SELURUH TRANSAKSI - supaya tidak perlu kalkulator.
-
-     Diminta pemilik toko sendiri: untuk tahu ke mana perginya selisih antara angka versi
-     lama dan angka sekarang, ia harus menyaring status satu per satu lalu menjumlahkan
-     barisnya dengan kalkulator. Penjelasan yang benar tapi memaksa orang membuka kalkulator
-     sama saja dengan tidak menjelaskan.
-
-     Kotak ringkasan di atas SENGAJA tetap hanya menghitung yang lunas - itu definisi omset
-     (HUKUM 5) dan tidak boleh ikut berubah saat status disaring. Rincian ini menjawab
-     pertanyaan yang berbeda: "kalau semuanya dijumlahkan, jadi berapa, dan isinya apa saja". --}}
+{{-- RINCIAN TRANSAKSI AKTIF --}}
 @php
     $nLunas  = $rincianStatus['completed'] ?? null;
     $nTunggu = $rincianStatus['waiting'] ?? null;
     $vLunas  = (float) ($nLunas->nilai ?? 0);
     $vTunggu = (float) ($nTunggu->nilai ?? 0);
+    $jLunas  = (int) ($nLunas->jumlah ?? 0);
+    $jTunggu = (int) ($nTunggu->jumlah ?? 0);
 @endphp
 <div class="card p-4 mb-4">
     <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
         <h2 class="font-semibold">Rincian Seluruh Transaksi</h2>
         <span class="text-sm text-slate-500 tabular-nums">
-            Jumlah semuanya Rp {{ number_format($vLunas + $vTunggu, 0, ',', '.') }}
+            Total Transaksi: Rp {{ number_format($vLunas + $vTunggu, 0, ',', '.') }} ({{ $jLunas + $jTunggu }} transaksi)
         </span>
     </div>
 
     <p class="text-xs text-slate-500 mb-3">
-        Dari jumlah di atas, <strong>hanya yang lunas</strong> yang dihitung sebagai omset.
-        Pesanan yang belum lunas masih berupa piutang. Aplikasi versi lama menjumlahkan keduanya jadi satu &mdash;
-        itulah kenapa angkanya dulu terlihat jauh lebih besar.
+        Menampilkan ringkasan transaksi aktif. Dari jumlah di atas, <strong>hanya penjualan lunas</strong> yang dihitung sebagai omset pendapatan, sedangkan pesanan belum lunas masih berupa piutang barang/jasa.
     </p>
 
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div class="border rounded-lg px-3 py-2 bg-green-100 text-green-700 border-green-200">
-            <div class="text-xs">Penjualan Lunas &middot; {{ $nLunas->jumlah ?? 0 }} transaksi</div>
+            <div class="text-xs">Penjualan Lunas &middot; {{ $jLunas }} transaksi</div>
             <div class="font-bold tabular-nums">Rp {{ number_format($vLunas, 0, ',', '.') }}</div>
-            <div class="text-xs">= omset</div>
+            <div class="text-xs">= omset pendapatan</div>
         </div>
         <div class="border rounded-lg px-3 py-2 bg-amber-100 text-amber-700 border-amber-200">
-            <div class="text-xs">Belum Lunas &middot; {{ $nTunggu->jumlah ?? 0 }} pesanan</div>
+            <div class="text-xs">Belum Lunas &middot; {{ $jTunggu }} pesanan</div>
             <div class="font-bold tabular-nums">Rp {{ number_format($vTunggu, 0, ',', '.') }}</div>
             <div class="text-xs">piutang, belum jadi omset</div>
         </div>
         <div class="border rounded-lg px-3 py-2 bg-slate-100 text-slate-700 border-slate-200">
-            <div class="text-xs">Kalau keduanya dijumlahkan</div>
+            <div class="text-xs">Total Transaksi Berjalan &middot; {{ $jLunas + $jTunggu }} transaksi</div>
             <div class="font-bold tabular-nums">Rp {{ number_format($vLunas + $vTunggu, 0, ',', '.') }}</div>
-            <div class="text-xs">cara hitung versi lama</div>
+            <div class="text-xs">lunas + belum lunas</div>
         </div>
     </div>
 </div>
@@ -109,10 +99,14 @@
      BERBEDA dari kartu-kartu di atasnya, dan menaruhnya berdampingan tanpa keterangan akan
      membuat pemilik toko mengira salah satunya rusak ketika keduanya tidak berjumlah sama. --}}
 <div class="card p-4 mb-4">
+    @php
+        $totalUangMasuk = array_sum($uangMasuk);
+        $totalNonTunai = $totalUangMasuk - ($uangMasuk['tunai'] ?? 0);
+    @endphp
     <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
         <h2 class="font-semibold">Uang Masuk per Metode</h2>
-        <span class="text-sm text-slate-500 tabular-nums">
-            Total Rp {{ number_format(array_sum($uangMasuk), 0, ',', '.') }}
+        <span class="text-sm font-semibold text-slate-700 tabular-nums">
+            Total Rp {{ number_format($totalUangMasuk, 0, ',', '.') }}
         </span>
     </div>
 
@@ -124,18 +118,56 @@
         Transaksi yang dibatalkan tidak dihitung karena uangnya sudah kembali ke pembeli.
     </p>
 
-    <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
         @foreach(\App\Support\MetodeBayar::pilihan() as $kunci => $labelMetode)
             @continue($kunci === 'lainnya' && empty($uangMasuk['lainnya']))
-            <div class="border rounded-lg px-3 py-2 {{ \App\Support\MetodeBayar::kelas($kunci) }}">
-                <div class="text-xs">{{ $labelMetode }}</div>
+            <a href="{{ route('laporan.penjualan', array_merge(request()->except('page'), ['metode' => $kunci])) }}#tabel-transaksi"
+               class="block border rounded-lg px-3 py-2 transition hover:shadow-md cursor-pointer {{ \App\Support\MetodeBayar::kelas($kunci) }} {{ $metode === $kunci ? 'ring-2 ring-brand-500' : '' }}"
+               title="Klik untuk melihat transaksi {{ $labelMetode }}">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold">{{ $labelMetode }}</span>
+                    @if($metode === $kunci)
+                        <span class="text-[10px] font-bold uppercase tracking-wider bg-white/90 px-1.5 py-0.2 rounded text-brand-700">Aktif</span>
+                    @else
+                        <span class="text-[10px] text-slate-400">&rarr;</span>
+                    @endif
+                </div>
                 <div class="font-bold tabular-nums">Rp {{ number_format($uangMasuk[$kunci] ?? 0, 0, ',', '.') }}</div>
-            </div>
+                <div class="text-[10px] text-slate-500 mt-0.5">Lihat transaksi &rarr;</div>
+            </a>
         @endforeach
+        <a href="{{ route('laporan.penjualan', array_merge(request()->except(['page', 'metode']))) }}#tabel-transaksi"
+           class="block border rounded-lg px-3 py-2 bg-slate-100 text-slate-800 border-slate-300 transition hover:shadow-md cursor-pointer {{ empty($metode) ? 'ring-2 ring-slate-400' : '' }}"
+           title="Klik untuk melihat seluruh transaksi">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-slate-700">Total Semua Metode</span>
+                @if(empty($metode))
+                    <span class="text-[10px] font-bold uppercase tracking-wider bg-white px-1.5 py-0.2 rounded text-slate-600">Semua</span>
+                @else
+                    <span class="text-[10px] text-slate-400">&rarr;</span>
+                @endif
+            </div>
+            <div class="font-bold tabular-nums text-slate-900">Rp {{ number_format($totalUangMasuk, 0, ',', '.') }}</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">Non-Tunai: Rp {{ number_format($totalNonTunai, 0, ',', '.') }}</div>
+        </a>
     </div>
 </div>
 
-<div class="card overflow-hidden">
+<div id="tabel-transaksi" class="card overflow-hidden">
+    @if($metode)
+        <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2">
+                <span class="text-slate-500">Menyaring transaksi metode:</span>
+                <span class="font-bold px-2.5 py-0.5 rounded-full border {{ \App\Support\MetodeBayar::kelas($metode) }}">
+                    {{ \App\Support\MetodeBayar::label($metode) }}
+                </span>
+            </div>
+            <a href="{{ route('laporan.penjualan', array_merge(request()->except(['page', 'metode']))) }}#tabel-transaksi"
+               class="text-brand-600 hover:text-brand-700 font-semibold hover:underline flex items-center gap-1">
+                <span>&times; Reset ke Semua Metode</span>
+            </a>
+        </div>
+    @endif
     <table class="data-table w-full">
         <thead><tr><th>Invoice</th><th>Tanggal</th><th>Kasir</th><th>Pelanggan</th><th>Total</th><th>Metode Bayar</th><th>Status Retur</th><th>Status Pesanan</th><th></th></tr></thead>
         <tbody>

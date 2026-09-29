@@ -31,12 +31,16 @@ class NormalizeNumericInput
         // Master produk
         'cost_price',
         'sell_price',
+        'reseller_price',
+        'grosir_price',
         'wholesale_price',
         'wholesale_min_qty',
         'stock',
         'min_stock',
         'units.*.ratio_to_previous',
         'units.*.price',
+        'units.*.reseller_price',
+        'units.*.grosir_price',
         'units.*.cost_price',
         'units.*.modal_total',
         'units.*.biaya_lain',
@@ -49,8 +53,13 @@ class NormalizeNumericInput
         'additional_payment',
         'amount',
         'items.*.qty',
+        'items.*.price',
+        'items.*.sell_price',
         'add_items.*.qty',
         'qty',
+        'other_cost',
+        'other_unit_prices.*.sell_price',
+        'other_unit_prices.*.cost_price',
 
         // Pengaturan
         'percent',
@@ -59,6 +68,11 @@ class NormalizeNumericInput
         'custom_width',
         'margin',
         'font_size',
+
+        // Shift Kasir
+        'starting_cash',
+        'actual_cash',
+        'default_starting_cash',
     ];
 
     public function handle(Request $request, Closure $next): Response

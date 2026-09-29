@@ -17,7 +17,12 @@
 
         <div class="card p-4 mb-4 text-sm">
             <div class="grid grid-cols-2 gap-2">
-                <div><span class="text-slate-400">Pelanggan:</span> {{ $sale->customer->name ?? 'Umum' }}</div>
+                <div>
+                    <span class="text-slate-400">Pelanggan:</span> {{ $sale->customer->name ?? 'Umum' }}
+                    @if(($customerType ?? 'UMUM') && strtoupper($customerType ?? 'UMUM') !== 'UMUM')
+                        <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold {{ strtoupper($customerType) === 'RESELLER' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700' }}">{{ ucfirst(strtolower($customerType)) }}</span>
+                    @endif
+                </div>
                 <div><span class="text-slate-400">Tanggal:</span> {{ $sale->created_at->format('d/m/Y H:i') }}</div>
                 <div><span class="text-slate-400">DP sudah dibayar:</span> Rp {{ number_format($sale->paid_amount, 0, ',', '.') }}</div>
                 <div><span class="text-slate-400">Kasir:</span> {{ $sale->cashier->name ?? '-' }}</div>
@@ -43,13 +48,17 @@
             </div>
             @if($allowToggle)
             <div class="flex rounded-lg border overflow-hidden text-sm">
-                <button type="button" @click="setViewMode('gambar')" :class="viewMode === 'gambar' ? 'bg-brand-500 text-white' : 'bg-white text-slate-600'" class="px-3 py-2">🖼️</button>
-                <button type="button" @click="setViewMode('list')" :class="viewMode === 'list' ? 'bg-brand-500 text-white' : 'bg-white text-slate-600'" class="px-3 py-2 border-l">📋</button>
+                <button type="button" @click="setViewMode('gambar')" :class="viewMode === 'gambar' ? 'bg-brand-500 text-white' : 'bg-white text-slate-600'" class="px-3 py-2 flex items-center justify-center" title="Mode Gambar">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+                </button>
+                <button type="button" @click="setViewMode('list')" :class="viewMode === 'list' ? 'bg-brand-500 text-white' : 'bg-white text-slate-600'" class="px-3 py-2 border-l flex items-center justify-center" title="Mode List">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                </button>
             </div>
             @endif
         </div>
 
-        <div x-show="viewMode === 'gambar'" class="grid grid-cols-3 sm:grid-cols-4 gap-3 mb-4">
+        <div x-show="viewMode === 'gambar'" class="grid grid-cols-3 sm:grid-cols-4 gap-3 mb-4 content-start" style="align-content: flex-start;">
             <template x-for="p in filteredProducts" :key="p.id">
                 <button type="button" @click="onProductClick(p)" :disabled="p.type !== 'jasa' && productStock(p.id) <= 0"
                     class="card p-2 text-left hover:shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed">
@@ -57,8 +66,18 @@
                         <img :src="p.image_url" class="w-full h-full object-cover">
                     </div>
                     <div class="text-sm font-medium truncate" x-text="p.name"></div>
-                    <div class="text-xs" :class="p.type === 'jasa' ? 'text-blue-600' : 'text-slate-400'" x-text="p.type === 'jasa' ? '🛠️ Jasa' : ('Stok: ' + productStock(p.id))"></div>
-                    <div class="text-sm font-semibold text-blue-600" x-text="'Rp ' + formatNumber(p.sell_price)"></div>
+                    <div class="text-xs flex items-center gap-1" :class="p.type === 'jasa' ? 'text-blue-600 font-medium' : 'text-slate-400'">
+                        <template x-if="p.type === 'jasa'">
+                            <span class="inline-flex items-center gap-0.5">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                                <span>Jasa</span>
+                            </span>
+                        </template>
+                        <template x-if="p.type !== 'jasa'">
+                            <span x-text="'Stok: ' + productStock(p.id)"></span>
+                        </template>
+                    </div>
+                    <div class="text-sm font-semibold text-blue-600" x-text="'Rp ' + formatNumber(displayPrice(p))"></div>
                 </button>
             </template>
             <template x-if="search && filteredProducts.length === 0">
@@ -85,9 +104,12 @@
                                     </div>
                                 </template>
                             </td>
-                            <td class="text-right" x-text="'Rp ' + formatNumber(p.sell_price)"></td>
+                            <td class="text-right" x-text="'Rp ' + formatNumber(displayPrice(p))"></td>
                             <td class="text-right">
-                                <span x-show="p.type === 'jasa'" class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">🛠️ Jasa</span>
+                                <span x-show="p.type === 'jasa'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                                    <span>Jasa</span>
+                                </span>
                                 <span x-show="p.type !== 'jasa'" x-text="productStock(p.id)"></span>
                             </td>
                             <td class="text-right">
@@ -120,7 +142,9 @@
                         <div class="text-xs text-slate-400 flex items-center gap-1">
                             <span x-text="'Rp ' + formatNumber(linePrice(item))"></span>
                             <span x-show="item.unit_label" class="text-amber-600" x-text="'/ ' + item.unit_label"></span>
-                            <span x-show="isWholesaleActive(item)" class="text-emerald-600 font-medium">Grosir</span>
+                            <template x-if="activeTierBadge(item)">
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-medium" :class="activeTierBadge(item).class" x-text="activeTierBadge(item).label"></span>
+                            </template>
                         </div>
                     </div>
                     <div class="flex items-center gap-1">
@@ -169,7 +193,7 @@
             <div class="space-y-2 max-h-[50vh] overflow-y-auto">
                 <button @click="chooseUnit('base')" class="w-full flex justify-between items-center border rounded-lg px-4 py-3 hover:bg-slate-50">
                     <span class="uppercase text-sm font-medium" x-text="unitPickerProduct ? (unitPickerProduct.unit || 'pcs') : ''"></span>
-                    <span class="font-semibold text-blue-600" x-text="unitPickerProduct ? 'Rp ' + formatNumber(unitPickerProduct.sell_price) : ''"></span>
+                    <span class="font-semibold text-blue-600" x-text="unitPickerProduct ? 'Rp ' + formatNumber(displayPrice(unitPickerProduct)) : ''"></span>
                 </button>
                 <template x-for="u in (unitPickerProduct ? unitPickerProduct.additional_units : [])" :key="u.id">
                     <button @click="chooseUnit('unit_' + u.id)" class="w-full flex justify-between items-center border rounded-lg px-4 py-3 hover:bg-slate-50">
@@ -177,7 +201,7 @@
                             <span x-text="u.unit_name"></span>
                             <span class="text-slate-400 font-normal" x-text="'(isi ' + formatQty(u.conversion) + ' ' + (unitPickerProduct.unit || 'pcs') + ')'"></span>
                         </span>
-                        <span class="font-semibold text-blue-600" x-text="'Rp ' + formatNumber(u.price)"></span>
+                        <span class="font-semibold text-blue-600" x-text="'Rp ' + formatNumber(displayUnitPrice(u))"></span>
                     </button>
                 </template>
             </div>
@@ -201,6 +225,7 @@ function waitingEditApp() {
         taxPercent: {{ ($tax['enabled'] ?? false) ? ($tax['percent'] ?? 0) : 0 }},
         viewMode: '{{ $defaultView }}',
         allowToggle: {{ $allowToggle ? 'true' : 'false' }},
+        customerType: '{{ strtoupper($customerType ?? "UMUM") }}',
 
         init() {
             if (this.allowToggle) {
@@ -211,6 +236,28 @@ function waitingEditApp() {
         setViewMode(mode) {
             this.viewMode = mode;
             if (this.allowToggle) localStorage.setItem('kasir_view_mode', mode);
+        },
+
+        displayPrice(p) {
+            const tipe = this.customerType;
+            if (tipe === 'RESELLER' && p.reseller_price && Number(p.reseller_price) > 0) {
+                return Number(p.reseller_price);
+            }
+            if (tipe === 'GROSIR' && p.grosir_price && Number(p.grosir_price) > 0) {
+                return Number(p.grosir_price);
+            }
+            return Number(p.sell_price);
+        },
+
+        displayUnitPrice(u) {
+            const tipe = this.customerType;
+            if (tipe === 'RESELLER' && u.reseller_price && Number(u.reseller_price) > 0) {
+                return Number(u.reseller_price);
+            }
+            if (tipe === 'GROSIR' && u.grosir_price && Number(u.grosir_price) > 0) {
+                return Number(u.grosir_price);
+            }
+            return Number(u.price);
         },
 
         get filteredProducts() {
@@ -257,7 +304,10 @@ function waitingEditApp() {
         },
 
         addToCartWithUnit(p, unitType) {
-            let conversion = 1, unitLabel = null, price = p.sell_price;
+            let conversion = 1, unitLabel = null;
+            let sellPrice = p.sell_price;
+            let resellerPrice = p.reseller_price;
+            let grosirPrice = p.grosir_price;
             let wholesalePrice = p.wholesale_price, wholesaleMinQty = p.wholesale_min_qty;
             let bolehPecahan = !!p.is_weighable;
 
@@ -270,7 +320,9 @@ function waitingEditApp() {
                 }
                 conversion = pu.conversion;
                 unitLabel = pu.unit_name;
-                price = pu.price;
+                sellPrice = pu.price;
+                resellerPrice = (pu.reseller_price !== null && pu.reseller_price !== undefined && pu.reseller_price !== '') ? pu.reseller_price : null;
+                grosirPrice = (pu.grosir_price !== null && pu.grosir_price !== undefined && pu.grosir_price !== '') ? pu.grosir_price : null;
                 wholesalePrice = pu.wholesale_price;
                 wholesaleMinQty = pu.wholesale_min_qty;
                 bolehPecahan = !!pu.is_weighable;
@@ -296,17 +348,48 @@ function waitingEditApp() {
                     unit_type: unitType, unit_label: unitLabel, conversion: conversion,
                     is_weighable: bolehPecahan,
                     qty: 1,
-                    price: price, wholesale_price: wholesalePrice, wholesale_min_qty: wholesaleMinQty,
+                    price: sellPrice,
+                    sell_price: sellPrice,
+                    reseller_price: resellerPrice,
+                    grosir_price: grosirPrice,
+                    wholesale_price: wholesalePrice,
+                    wholesale_min_qty: wholesaleMinQty,
                 });
             }
         },
 
-        linePrice(item) {
-            if (this.isWholesaleActive(item)) return item.wholesale_price;
-            return item.price;
-        },
         isWholesaleActive(item) {
+            const tipe = this.customerType;
+            if (tipe === 'RESELLER' && item.reseller_price && Number(item.reseller_price) > 0) return false;
+            if (tipe === 'GROSIR' && item.grosir_price && Number(item.grosir_price) > 0) return false;
+
             return item.wholesale_price != null && item.wholesale_min_qty != null && item.qty >= item.wholesale_min_qty;
+        },
+
+        linePrice(item) {
+            const tipe = this.customerType;
+            if (tipe === 'RESELLER' && item.reseller_price && Number(item.reseller_price) > 0) {
+                return Number(item.reseller_price);
+            }
+            if (tipe === 'GROSIR' && item.grosir_price && Number(item.grosir_price) > 0) {
+                return Number(item.grosir_price);
+            }
+            if (this.isWholesaleActive(item)) return Number(item.wholesale_price);
+            return Number(item.sell_price ?? item.price);
+        },
+
+        activeTierBadge(item) {
+            const tipe = this.customerType;
+            if (tipe === 'RESELLER' && item.reseller_price && Number(item.reseller_price) > 0) {
+                return { label: 'Reseller', class: 'bg-blue-100 text-blue-700' };
+            }
+            if (tipe === 'GROSIR' && item.grosir_price && Number(item.grosir_price) > 0) {
+                return { label: 'Grosir', class: 'bg-amber-100 text-amber-700' };
+            }
+            if (this.isWholesaleActive(item)) {
+                return { label: 'Grosir', class: 'bg-green-100 text-green-700' };
+            }
+            return null;
         },
 
         bulatQty(n) { return Math.round((Number(n) || 0) * 1000) / 1000; },

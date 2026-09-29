@@ -25,14 +25,21 @@ trait ResolvesUnitPricing
      *     ditimbang boleh pecahan sementara "Kg" pada produk lain yang dijual per karung
      *     tidak.
      */
-    protected function resolveUnitPricing(Product $product, ?string $unitType, float $qty): array
+    protected function resolveUnitPricing(Product $product, ?string $unitType, float $qty, ?string $customerType = 'UMUM'): array
     {
         $unitType = $unitType ?: 'base';
+        $tipe = strtoupper(trim((string) $customerType) ?: 'UMUM');
 
         if ($unitType === 'base') {
-            $price = ($product->wholesale_price !== null && $product->wholesale_min_qty !== null && $qty >= $product->wholesale_min_qty)
-                ? (float) $product->wholesale_price
-                : (float) $product->sell_price;
+            if ($tipe === 'RESELLER' && $product->reseller_price !== null && (float) $product->reseller_price > 0) {
+                $price = (float) $product->reseller_price;
+            } elseif ($tipe === 'GROSIR' && $product->grosir_price !== null && (float) $product->grosir_price > 0) {
+                $price = (float) $product->grosir_price;
+            } elseif ($product->wholesale_price !== null && $product->wholesale_min_qty !== null && $qty >= $product->wholesale_min_qty) {
+                $price = (float) $product->wholesale_price;
+            } else {
+                $price = (float) $product->sell_price;
+            }
 
             return [
                 'conversion' => 1.0,
@@ -50,9 +57,15 @@ trait ResolvesUnitPricing
                 abort(422, "Satuan yang dipilih untuk {$product->name} tidak ditemukan atau sudah dihapus.");
             }
 
-            $price = ($productUnit->wholesale_price !== null && $productUnit->wholesale_min_qty !== null && $qty >= $productUnit->wholesale_min_qty)
-                ? (float) $productUnit->wholesale_price
-                : (float) $productUnit->price;
+            if ($tipe === 'RESELLER' && $productUnit->reseller_price !== null && (float) $productUnit->reseller_price > 0) {
+                $price = (float) $productUnit->reseller_price;
+            } elseif ($tipe === 'GROSIR' && $productUnit->grosir_price !== null && (float) $productUnit->grosir_price > 0) {
+                $price = (float) $productUnit->grosir_price;
+            } elseif ($productUnit->wholesale_price !== null && $productUnit->wholesale_min_qty !== null && $qty >= $productUnit->wholesale_min_qty) {
+                $price = (float) $productUnit->wholesale_price;
+            } else {
+                $price = (float) $productUnit->price;
+            }
 
             return [
                 'conversion' => (float) $productUnit->conversion,

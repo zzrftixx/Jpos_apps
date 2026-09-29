@@ -89,7 +89,7 @@
                             <div class="mt-2.5 max-w-xs" x-show="startingCashMode === 'fixed'">
                                 <div class="flex items-stretch rounded-lg border border-slate-300 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100 bg-white overflow-hidden shadow-2xs">
                                     <span class="inline-flex items-center px-3 bg-slate-100 text-slate-600 font-bold text-xs border-r border-slate-200 select-none">Rp</span>
-                                    <input type="number" name="default_starting_cash" min="0" step="500"
+                                    <input type="number" name="default_starting_cash" min="0" step="any"
                                            value="{{ (int) ($settings['default_starting_cash'] ?? 0) }}"
                                            placeholder="0"
                                            class="w-full py-1.5 px-2.5 text-xs font-bold text-slate-900 border-0 focus:ring-0">

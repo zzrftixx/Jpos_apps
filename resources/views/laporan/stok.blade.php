@@ -5,7 +5,7 @@
 @include('laporan._tabs')
 
 <div class="flex justify-end mb-4">
-    @include('laporan._ekspor', ['jenis' => 'stok', 'filter' => []])
+    @include('laporan._ekspor', ['jenis' => 'stok', 'filter' => array_filter(['q' => request('q'), 'low_stock' => request('low_stock')])])
 </div>
 
 <form method="GET" class="flex flex-wrap items-end gap-3 mb-4" data-live-search>

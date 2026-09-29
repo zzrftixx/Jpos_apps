@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\SalePayment;
 use App\Models\SaleReturn;
 use App\Models\Setting;
 use Illuminate\Support\Facades\DB;
@@ -329,8 +330,13 @@ class Akuntansi
      * luar penjualan), jadi uangnya diambil langsung dari tabel penjualan. Kembalian
      * dikurangkan karena itu uang yang keluar lagi.
      */
-    private static function kasPada(string $tanggal, string $mulai, float $saldoAwal): float
+    public static function kasPada(string $tanggal, ?string $mulai = null, ?float $saldoAwal = null): float
     {
+        if ($mulai === null || $saldoAwal === null) {
+            $atur = self::pengaturanPembukuan();
+            $mulai = $mulai ?? ($atur['tanggal_mulai'] ?: '1970-01-01');
+            $saldoAwal = $saldoAwal ?? (float) $atur['saldo_awal_kas'];
+        }
         // Transaksi yang DIBATALKAN dikeluarkan dari kas.
         //
         // Pesanan DP yang dibatalkan tetap menyimpan paid_amount-nya - dan itu benar, uang
@@ -358,13 +364,16 @@ class Akuntansi
             ->whereDate('created_at', '<=', $tanggal)
             ->sum('total');
 
-        $kasMasuk = CashTransaction::whereDate('created_at', '>=', $mulai)
+        $cashTotals = CashTransaction::whereDate('created_at', '>=', $mulai)
             ->whereDate('created_at', '<=', $tanggal)
-            ->where('type', 'in')->sum('amount');
+            ->selectRaw("
+                COALESCE(SUM(CASE WHEN type = 'in' THEN amount ELSE 0 END), 0) as total_in,
+                COALESCE(SUM(CASE WHEN type = 'out' THEN amount ELSE 0 END), 0) as total_out
+            ")
+            ->first();
 
-        $kasKeluar = CashTransaction::whereDate('created_at', '>=', $mulai)
-            ->whereDate('created_at', '<=', $tanggal)
-            ->where('type', 'out')->sum('amount');
+        $kasMasuk = (float) ($cashTotals->total_in ?? 0);
+        $kasKeluar = (float) ($cashTotals->total_out ?? 0);
 
         return Angka::bulat($saldoAwal + (float) $dariPenjualan - (float) $refundRetur + (float) $kasMasuk - (float) $kasKeluar);
     }
@@ -401,23 +410,12 @@ class Akuntansi
     }
 
     /**
-     * Uang muka pelanggan: uang yang sudah diterima untuk barang yang belum diserahkan.
-     *
-     * Pesanan yang dibatalkan ikut dihitung selama uangnya belum dikembalikan - toko masih
-     * memegang uang orang lain, dan itu kewajiban sampai dikembalikan atau disepakati hangus.
+     * Uang muka pesanan: seluruh uang yang sudah diterima dari pesanan yang statusnya masih
+     * 'waiting' (belum selesai) pada tanggal yang bersangkutan.
      */
     private static function uangMukaPelanggan(string $tanggal, string $mulai): float
     {
         return Angka::bulat(
-            // 'cancelled' DIKELUARKAN, sepasang dengan kasPada() di atas. Pesanan yang
-            // dibatalkan bukan lagi kewajiban toko: barangnya sudah kembali ke rak dan
-            // uangnya sudah kembali ke pembeli. Membiarkannya di sini sementara kasPada
-            // sudah mengeluarkannya akan membuat KEWAJIBAN lebih besar dari ASET - neraca
-            // tidak seimbang, dan H7 dilanggar.
-            //
-            // ASUMSI YANG DIPAKAI: DP pesanan yang dibatalkan DIKEMBALIKAN ke pembeli.
-            // Kalau sebuah toko justru menghanguskan DP (uangnya tetap di laci), itu
-            // pendapatan lain - catat lewat Kas Masuk, jangan diam-diam ditinggal di sini.
             Sale::where('order_status', 'waiting')
                 ->whereDate('created_at', '>=', $mulai)
                 ->whereDate('created_at', '<=', $tanggal)
@@ -442,5 +440,132 @@ class Akuntansi
         ksort($hasil);
 
         return $hasil;
+    }
+
+    /**
+     * Ringkasan mutasi kas terpadu untuk rentang tanggal:
+     * memadukan kas masuk penjualan (kasir), kas masuk manual, kas keluar manual,
+     * serta refund retur penjualan.
+     */
+    public static function ringkasanKas(string $dari, string $sampai): object
+    {
+        $cashTotals = CashTransaction::whereDate('created_at', '>=', $dari)
+            ->whereDate('created_at', '<=', $sampai)
+            ->selectRaw("
+                COALESCE(SUM(CASE WHEN type = 'in' THEN amount ELSE 0 END), 0) as total_in,
+                COALESCE(SUM(CASE WHEN type = 'out' THEN amount ELSE 0 END), 0) as total_out
+            ")
+            ->first();
+
+        $kasMasukManual = (float) ($cashTotals->total_in ?? 0);
+        $kasKeluarManual = (float) ($cashTotals->total_out ?? 0);
+
+        $refundRetur = (float) SaleReturn::whereDate('created_at', '>=', $dari)
+            ->whereDate('created_at', '<=', $sampai)
+            ->sum('total');
+
+        $penjualanPerMetode = SalePayment::query()
+            ->join('sales', 'sales.id', '=', 'sale_payments.sale_id')
+            ->whereDate('sale_payments.created_at', '>=', $dari)
+            ->whereDate('sale_payments.created_at', '<=', $sampai)
+            ->where('sales.order_status', '<>', 'cancelled')
+            ->selectRaw('sale_payments.method, SUM(sale_payments.amount) as nilai')
+            ->groupBy('sale_payments.method')
+            ->pluck('nilai', 'method')
+            ->all();
+
+        $legacySales = Sale::where('order_status', '<>', 'cancelled')
+            ->whereDate('created_at', '>=', $dari)
+            ->whereDate('created_at', '<=', $sampai)
+            ->whereNotExists(function ($sub) {
+                $sub->select(DB::raw(1))
+                    ->from('sale_payments')
+                    ->whereColumn('sale_payments.sale_id', 'sales.id');
+            })
+            ->selectRaw('payment_method, SUM(paid_amount - change_amount) as nilai')
+            ->groupBy('payment_method')
+            ->pluck('nilai', 'payment_method')
+            ->all();
+
+        foreach ($legacySales as $metode => $nilai) {
+            $penjualanPerMetode[$metode] = ($penjualanPerMetode[$metode] ?? 0) + (float) $nilai;
+        }
+
+        $dariPenjualan = (float) array_sum($penjualanPerMetode);
+
+        $totalIn = Angka::bulat($dariPenjualan + $kasMasukManual);
+        $totalOut = Angka::bulat($kasKeluarManual + $refundRetur);
+        $saldoPeriode = Angka::bulat($totalIn - $totalOut);
+        $saldoKasToko = self::kasPada(now()->toDateString());
+
+        return (object) [
+            'total_in' => $totalIn,
+            'total_out' => $totalOut,
+            'penjualan' => Angka::bulat($dariPenjualan),
+            'manual_in' => Angka::bulat($kasMasukManual),
+            'manual_out' => Angka::bulat($kasKeluarManual),
+            'refund_retur' => Angka::bulat($refundRetur),
+            'saldo_periode' => $saldoPeriode,
+            'saldo_kas_toko' => $saldoKasToko,
+            'penjualan_per_metode' => $penjualanPerMetode,
+        ];
+    }
+
+    /**
+     * Query mutasi kas terpadu (menggabungkan kas manual, penerimaan penjualan kasir, dan retur).
+     */
+    public static function queryMutasiKas(string $dari, string $sampai, ?string $type = null): \Illuminate\Database\Query\Builder
+    {
+        $q1 = DB::table('cash_transactions')
+            ->whereDate('created_at', '>=', $dari)
+            ->whereDate('created_at', '<=', $sampai)
+            ->selectRaw("id, created_at, type, category, amount, note, user_id, 'cash_transaction' as source_type, id as reference_id, NULL as extra_info");
+
+        $q2 = DB::table('sale_payments')
+            ->join('sales', 'sales.id', '=', 'sale_payments.sale_id')
+            ->leftJoin('customers', 'customers.id', '=', 'sales.customer_id')
+            ->where('sales.order_status', '<>', 'cancelled')
+            ->where('sale_payments.amount', '>', 0)
+            ->whereDate('sale_payments.created_at', '>=', $dari)
+            ->whereDate('sale_payments.created_at', '<=', $sampai)
+            ->selectRaw("sale_payments.id, sale_payments.created_at, 'in' as type, sale_payments.method as category, sale_payments.amount as amount, sales.invoice_no as note, COALESCE(sale_payments.user_id, sales.user_id) as user_id, 'sale' as source_type, sales.id as reference_id, customers.name as extra_info");
+
+        $qLegacy = DB::table('sales')
+            ->leftJoin('customers', 'customers.id', '=', 'sales.customer_id')
+            ->where('sales.order_status', '<>', 'cancelled')
+            ->whereRaw('(sales.paid_amount - sales.change_amount) > 0')
+            ->whereDate('sales.created_at', '>=', $dari)
+            ->whereDate('sales.created_at', '<=', $sampai)
+            ->whereNotExists(function ($sub) {
+                $sub->select(DB::raw(1))
+                    ->from('sale_payments')
+                    ->whereColumn('sale_payments.sale_id', 'sales.id');
+            })
+            ->selectRaw("sales.id, sales.created_at, 'in' as type, sales.payment_method as category, (sales.paid_amount - sales.change_amount) as amount, sales.invoice_no as note, sales.user_id, 'sale' as source_type, sales.id as reference_id, customers.name as extra_info");
+
+        $q3 = DB::table('sale_returns')
+            ->where('total', '>', 0)
+            ->whereDate('created_at', '>=', $dari)
+            ->whereDate('created_at', '<=', $sampai)
+            ->selectRaw("id, created_at, 'out' as type, 'retur' as category, total as amount, return_no as note, user_id, 'sale_return' as source_type, id as reference_id, reason as extra_info");
+
+        $union = $q1->unionAll($q2)->unionAll($qLegacy)->unionAll($q3);
+        $query = DB::query()->fromSub($union, 'mutasi');
+
+        if ($type === 'in') {
+            $query->where('type', 'in');
+        } elseif ($type === 'out') {
+            $query->where('type', 'out');
+        } elseif ($type === 'sale') {
+            $query->where('source_type', 'sale');
+        } elseif ($type === 'manual_in') {
+            $query->where('source_type', 'cash_transaction')->where('type', 'in');
+        } elseif ($type === 'manual_out') {
+            $query->where('source_type', 'cash_transaction')->where('type', 'out');
+        } elseif ($type === 'return') {
+            $query->where('source_type', 'sale_return');
+        }
+
+        return $query->orderByDesc('created_at');
     }
 }

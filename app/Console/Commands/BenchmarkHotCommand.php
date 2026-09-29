@@ -270,7 +270,7 @@ class BenchmarkHotCommand extends Command
         $tShift = (microtime(true) - $t0) * 1000;
 
         $t0 = microtime(true);
-        $mutasi = CashTransaction::whereBetween('created_at', [now()->startOfDay(), now()->endOfDay()])->get();
+        $mutasi = Akuntansi::queryMutasiKas(now()->startOfDay()->toDateString(), now()->endOfDay()->toDateString())->get();
         $tMutasi = (microtime(true) - $t0) * 1000;
 
         $this->line(sprintf('  Kalkulasi Laci Shift (Per-Metode)  : %6.2f ms (Total Uang Masuk: Rp %s)', $tShift, number_format($ringkasanShift['total_sales'] ?? 0, 0, ',', '.')));

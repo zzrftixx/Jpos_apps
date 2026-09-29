@@ -101,7 +101,7 @@
         </div>
         <div class="card p-3.5">
             <div class="text-xs text-slate-500 font-medium">Total Penjualan Shift</div>
-            <div class="text-xl font-bold text-green-700 mt-1">Rp {{ number_format($summary->total_sales, 0, ',', '.') }}</div>
+            <div class="text-xl font-bold text-emerald-700 mt-1">Rp {{ number_format($summary->total_sales, 0, ',', '.') }}</div>
             <div class="text-[11px] text-slate-400 mt-0.5">{{ $summary->total_trx }} transaksi aktif</div>
         </div>
         <div class="card p-3.5">
@@ -118,7 +118,7 @@
             <div class="text-xs text-slate-500 font-medium">Total Selisih Kas Laci</div>
             <div class="text-xl font-bold mt-1 font-mono">
                 @if(abs($summary->total_difference) < 0.01)
-                    <span class="text-green-700">Rp 0 (Pas)</span>
+                    <span class="text-emerald-700">Rp 0 (Pas)</span>
                 @elseif($summary->total_difference > 0)
                     <span class="text-blue-700">+Rp {{ number_format($summary->total_difference, 0, ',', '.') }}</span>
                 @else
@@ -238,8 +238,8 @@
                                 </td>
                                 <td class="py-2.5 px-3 text-center">
                                     @if($rs->status === 'open')
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800">
-                                            <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                                             <span>Aktif</span>
                                         </span>
                                     @else
@@ -251,7 +251,7 @@
                                 <td class="py-2.5 px-3 text-right font-mono font-semibold text-slate-700">
                                     Rp {{ number_format($rs->starting_cash, 0, ',', '.') }}
                                 </td>
-                                <td class="py-2.5 px-3 text-right font-mono font-semibold text-green-700">
+                                <td class="py-2.5 px-3 text-right font-mono font-semibold text-emerald-700">
                                     Rp {{ number_format($calc['cash_sales'] ?? $rs->cash_sales, 0, ',', '.') }}
                                 </td>
                                 <td class="py-2.5 px-3 text-right font-mono font-semibold text-blue-700">
@@ -311,13 +311,13 @@
                                 <td class="py-3 px-3 text-right font-mono text-slate-800">
                                     Rp {{ number_format($sumRekapModal, 0, ',', '.') }}
                                 </td>
-                                <td class="py-3 px-3 text-right font-mono text-green-800">
+                                <td class="py-3 px-3 text-right font-mono text-emerald-800">
                                     Rp {{ number_format($sumRekapTunai, 0, ',', '.') }}
                                 </td>
                                 <td class="py-3 px-3 text-right font-mono text-blue-800">
                                     Rp {{ number_format($sumRekapNonTunai, 0, ',', '.') }}
                                 </td>
-                                <td class="py-3 px-3 text-right font-mono text-green-900 text-sm">
+                                <td class="py-3 px-3 text-right font-mono text-emerald-900 text-sm">
                                     Rp {{ number_format($sumRekapTotal, 0, ',', '.') }}
                                 </td>
                                 <td class="py-3 px-3 text-right font-mono text-slate-800">
@@ -325,7 +325,7 @@
                                 </td>
                                 <td class="py-3 px-3 text-center font-mono">
                                     @if(abs($summary->total_difference) < 0.01)
-                                        <span class="text-green-700">PAS</span>
+                                        <span class="text-emerald-700">PAS</span>
                                     @elseif($summary->total_difference > 0)
                                         <span class="text-blue-700">+Rp {{ number_format($summary->total_difference, 0, ',', '.') }}</span>
                                     @else
@@ -351,7 +351,7 @@
         <div class="flex items-center justify-between gap-2">
             <div>
                 <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
-                    <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
                     <span>Rincian Transaksi Lengkap per Shift</span>
                 </h2>
                 <p class="text-xs text-slate-500 mt-0.5">Rincian item barang terjual, breakdown metode pembayaran, dan mutasi kas laci per shift.</p>
@@ -392,8 +392,8 @@
                                 @endif
                             </span>
                             @if($s->status === 'open')
-                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                                     <span>Aktif</span>
                                 </span>
                             @else
@@ -417,7 +417,7 @@
                         </div>
                         <div class="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs">
                             <span class="text-slate-400 text-[10px] uppercase font-bold block">Penjualan Tunai</span>
-                            <span class="font-mono font-bold text-green-700">Rp {{ number_format($calc['cash_sales'] ?? $s->cash_sales, 0, ',', '.') }}</span>
+                            <span class="font-mono font-bold text-emerald-700">Rp {{ number_format($calc['cash_sales'] ?? $s->cash_sales, 0, ',', '.') }}</span>
                         </div>
                         <div class="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs">
                             <span class="text-slate-400 text-[10px] uppercase font-bold block">Non-Tunai</span>
@@ -432,7 +432,7 @@
                                 <span class="text-slate-400 text-[10px] uppercase font-bold block">Selisih Kas</span>
                                 <span class="font-mono font-bold">
                                     @if(abs($diff) < 0.01)
-                                        <span class="text-green-700">PAS</span>
+                                        <span class="text-emerald-700">PAS</span>
                                     @elseif($diff > 0)
                                         <span class="text-blue-700">+Rp {{ number_format($diff, 0, ',', '.') }}</span>
                                     @else
@@ -456,10 +456,10 @@
                     <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
                         <div class="font-bold text-slate-700 mb-2 flex items-center justify-between">
                             <span class="flex items-center gap-1.5">
-                                <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
                                 <span>Rekap Penerimaan Metode Bayar</span>
                             </span>
-                            <span class="text-green-700 font-mono font-bold">
+                            <span class="text-emerald-700 font-mono font-bold">
                                 Total Rp {{ number_format(($calc['total_sales'] ?? $trxTotal), 0, ',', '.') }}
                             </span>
                         </div>
@@ -494,9 +494,9 @@
                                 <span class="text-slate-400 block text-[9px] uppercase font-bold">Modal Awal</span>
                                 <span class="font-mono font-bold text-slate-800">Rp {{ number_format($calc['starting_cash'] ?? $s->starting_cash, 0, ',', '.') }}</span>
                             </div>
-                            <div class="border rounded-md px-2 py-1 bg-green-50 border-green-200">
-                                <span class="text-green-600 block text-[9px] uppercase font-bold">Penjualan Kas</span>
-                                <span class="font-mono font-bold text-green-800">+Rp {{ number_format($calc['cash_sales'] ?? $s->cash_sales, 0, ',', '.') }}</span>
+                            <div class="border rounded-md px-2 py-1 bg-emerald-50 border-emerald-200">
+                                <span class="text-emerald-600 block text-[9px] uppercase font-bold">Penjualan Kas</span>
+                                <span class="font-mono font-bold text-emerald-800">+Rp {{ number_format($calc['cash_sales'] ?? $s->cash_sales, 0, ',', '.') }}</span>
                             </div>
                             <div class="border rounded-md px-2 py-1 bg-slate-50 border-slate-200">
                                 <span class="text-slate-400 block text-[9px] uppercase font-bold">Kas Masuk/Keluar</span>
@@ -676,7 +676,7 @@
                                     <td class="py-2.5 px-3 text-right font-mono text-slate-700">
                                         {{ $trxPajak > 0 ? 'Rp ' . number_format($trxPajak, 0, ',', '.') : '-' }}
                                     </td>
-                                    <td class="py-2.5 px-3 text-right font-mono text-green-700 text-sm">
+                                    <td class="py-2.5 px-3 text-right font-mono text-emerald-700 text-sm">
                                         Rp {{ number_format($trxTotal, 0, ',', '.') }}
                                     </td>
                                     <td></td>

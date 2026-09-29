@@ -184,13 +184,14 @@ class LaporanEksporController extends Controller
 
         // Status pesanan dijaga sama persis dengan yang di layar, dengan alasan yang sama.
         // Nilai karangan diabaikan, bukan diteruskan mentah ke query.
-        $status = in_array($request->order_status, ['completed', 'waiting', 'cancelled'], true)
+        $status = in_array($request->order_status, ['completed', 'waiting'], true)
             ? $request->order_status
             : null;
 
         $penjualan = Sale::with(['customer', 'cashier', 'payments'])
             ->whereDate('created_at', '>=', $dari)
             ->whereDate('created_at', '<=', $sampai)
+            ->where('order_status', '<>', 'cancelled')
             ->when($status, fn ($q) => $q->where('order_status', $status))
             ->when($metode, fn ($q) => $q->whereHas('payments', fn ($p) => $p->where('method', $metode)))
             ->orderBy('created_at')
@@ -203,22 +204,18 @@ class LaporanEksporController extends Controller
                 'metode' => $s->payments->isEmpty()
                     ? '-'
                     : $s->payments->map(fn ($b) => MetodeBayar::label($b->method))->unique()->implode(', '),
-                'status' => $this->labelStatus($s->order_status),
+                'status' => $this->labelStatus($s->order_status) . ($s->status === 'returned' ? ' (Diretur)' : ''),
                 'diskon' => (float) $s->discount,
                 'pajak' => (float) $s->tax_amount,
                 'total' => (float) $s->total,
             ]);
 
-        // Rincian per status - pertanyaan yang sama dengan yang dijawab di layar.
-        //
-        // Ditambahkan supaya berkas unduhan dan layar tidak menjawab pertanyaan yang berbeda.
-        // Pemilik toko yang membuka PDF-nya akan bertanya persis seperti saat melihat layar:
-        // "kalau semuanya dijumlahkan jadi berapa, dan isinya apa saja" - dan jawabannya
-        // harus ada di berkas itu juga, bukan cuma di layar yang sedang tidak ia buka.
+        // Rincian per status - hanya transaksi aktif (selesai dan menunggu DP).
+        // Transaksi yang dibatalkan tidak dilaporkan dan tidak dihitung ke total.
         $perStatus = Sale::whereDate('created_at', '>=', $dari)
             ->whereDate('created_at', '<=', $sampai)
-            ->when($status, fn ($q) => $q->where('order_status', $status))
             ->where('order_status', '<>', 'cancelled')
+            ->when($status, fn ($q) => $q->where('order_status', $status))
             ->selectRaw('order_status, COUNT(*) as jumlah, SUM(total) as nilai')
             ->groupBy('order_status')
             ->get()
@@ -251,14 +248,39 @@ class LaporanEksporController extends Controller
                 'nilai' => (float) $b->nilai,
             ]);
 
+        $totalUangMasuk = (float) $uangMasuk->sum('nilai');
+        $uangTunai = (float) ($uangMasuk->firstWhere('metode', MetodeBayar::label('tunai'))['nilai'] ?? 0.0);
+        $totalNonTunai = $totalUangMasuk - $uangTunai;
+
+        $penjualanLunas = $penjualan->filter(fn ($s) => str_starts_with($s['status'], 'Selesai'));
+        $totalSemua = $penjualan->sum('total');
+        $totalLunas = $penjualanLunas->sum('total');
+
+        $ringkasan = [];
+        if ($status) {
+            $ringkasan['Filter Status'] = $this->labelStatus($status);
+            $ringkasan['Jumlah Transaksi'] = number_format($penjualan->count(), 0, ',', '.');
+            $ringkasan['Total Nilai Transaksi'] = Laporan::format($totalSemua, 'rupiah');
+            $ringkasan['Total Diskon'] = Laporan::format($penjualan->sum('diskon'), 'rupiah');
+            $ringkasan['Total Pajak Dipungut'] = Laporan::format($penjualan->sum('pajak'), 'rupiah');
+        } else {
+            $ringkasan['Total Pendapatan (Lunas)'] = Laporan::format($totalLunas, 'rupiah');
+            $ringkasan['Transaksi Lunas (Omset)'] = number_format($penjualanLunas->count(), 0, ',', '.') . ' transaksi';
+            $ringkasan['Total Diskon (Lunas)'] = Laporan::format($penjualanLunas->sum('diskon'), 'rupiah');
+            $ringkasan['Total Pajak (Lunas)'] = Laporan::format($penjualanLunas->sum('pajak'), 'rupiah');
+            if ($penjualan->count() !== $penjualanLunas->count()) {
+                $ringkasan['Total Seluruh Transaksi'] = Laporan::format($totalSemua, 'rupiah') . ' (' . $penjualan->count() . ' transaksi)';
+            }
+        }
+
+        if ($metode) {
+            $ringkasan['Filter Metode Bayar'] = MetodeBayar::label($metode);
+        }
+        $ringkasan['Total Uang Masuk Diterima'] = Laporan::format($totalUangMasuk, 'rupiah') . ' (Non-Tunai: ' . Laporan::format($totalNonTunai, 'rupiah') . ')';
+
         return Laporan::buat('Laporan Penjualan', 'penjualan')
             ->periode($dari, $sampai)
-            ->ringkasan([
-                'Jumlah Transaksi' => number_format($penjualan->count(), 0, ',', '.'),
-                'Total Nilai Transaksi' => Laporan::format($penjualan->sum('total'), 'rupiah'),
-                'Total Diskon' => Laporan::format($penjualan->sum('diskon'), 'rupiah'),
-                'Total Pajak Dipungut' => Laporan::format($penjualan->sum('pajak'), 'rupiah'),
-            ])
+            ->ringkasan($ringkasan)
             ->bagian('Rincian Transaksi', [
                 ['label' => 'Waktu', 'key' => 'tanggal', 'lebar' => 18],
                 ['label' => 'No. Invoice', 'key' => 'invoice', 'lebar' => 20],
@@ -296,10 +318,9 @@ class LaporanEksporController extends Controller
             ])
             ->catatan(
                 'Kolom Total memuat pajak, karena ini nilai yang benar-benar dibayar pembeli. Untuk omset tanpa pajak, lihat Laporan Laba Rugi.',
-                'Pesanan berstatus Menunggu dan Batal ikut ditampilkan supaya seluruh transaksi bisa ditelusuri, tapi keduanya tidak dihitung sebagai omset.',
-                'Uang Masuk per Metode menghitung uang yang BENAR-BENAR diterima pada rentang tanggal ini, jadi jumlahnya sengaja tidak sama dengan jumlah kolom Total. DP yang diterima bulan ini untuk pesanan yang selesai bulan depan sudah masuk di sini tapi belum jadi omset; sebaliknya pesanan yang selesai bulan ini tapi DP-nya diterima bulan lalu hanya tercatat sebesar pelunasannya. Inilah angka yang diadu dengan isi laci dan mutasi rekening.',
-                'Transaksi yang dibatalkan tidak dihitung sebagai uang masuk karena uangnya sudah dikembalikan ke pembeli.',
-                'Pada Rincian Seluruh Transaksi, JUMLAH SEMUANYA adalah penjumlahan keduanya (Lunas dan Belum Lunas) - dan itulah cara aplikasi versi lama menghitung omset, sehingga angkanya dulu terlihat jauh lebih besar. Yang benar-benar omset hanya baris berstatus Selesai.',
+                'Transaksi yang dibatalkan tidak dimasukkan ke dalam laporan dan tidak dihitung ke dalam total transaksi.',
+                'Uang Masuk per Metode menghitung uang yang BENAR-BENAR diterima pada rentang tanggal ini: Total ' . Laporan::format($totalUangMasuk, 'rupiah') . ' (Tunai: ' . Laporan::format($uangTunai, 'rupiah') . ', Non-Tunai: ' . Laporan::format($totalNonTunai, 'rupiah') . '). Inilah angka yang diadu dengan isi laci dan mutasi rekening.',
+                'Pada Rincian Transaksi, hanya transaksi berstatus aktif yang dilaporkan (Selesai dan Menunggu DP). Yang benar-benar dihitung sebagai omset adalah baris berstatus Selesai.',
             );
     }
 
@@ -357,8 +378,13 @@ class LaporanEksporController extends Controller
 
     private function laporanStok(Request $request): Laporan
     {
+        $q = trim((string) $request->q);
+        $lowStock = $request->boolean('low_stock');
+
         $produk = Product::with(['category', 'rackSlot.rack'])
             ->where('type', 'barang')
+            ->when($q !== '', fn ($query) => $query->where('name', 'like', "%{$q}%"))
+            ->when($lowStock, fn ($query) => $query->whereColumn('stock', '<=', 'min_stock'))
             ->orderBy('name')
             ->get();
 
@@ -368,27 +394,40 @@ class LaporanEksporController extends Controller
             'kategori' => $p->category->name ?? '-',
             'lokasi' => $p->rackSlot?->label() ?: '-',
             'stok' => (float) $p->stock,
+            'satuan' => $p->unit ?: 'Pcs',
             'min' => (float) $p->min_stock,
+            'status' => $p->isLowStock() ? 'Menipis' : 'Aman',
             'modal' => (float) $p->cost_price,
             'nilai' => Angka::bulat((float) $p->stock * (float) $p->cost_price),
         ]);
 
         $menipis = $produk->filter(fn (Product $p) => $p->isLowStock())->count();
 
+        $ringkasan = [
+            'Jumlah Jenis Barang' => number_format($produk->count(), 0, ',', '.'),
+            'Nilai Persediaan' => Laporan::format($baris->sum('nilai'), 'rupiah'),
+            'Barang Stok Menipis' => number_format($menipis, 0, ',', '.') . ' jenis',
+        ];
+
+        if ($lowStock) {
+            $ringkasan['Filter Stok'] = 'Hanya Stok Menipis';
+        }
+        if ($q !== '') {
+            $ringkasan['Pencarian'] = $q;
+        }
+
         return Laporan::buat('Laporan Stok & Nilai Persediaan', 'stok')
             ->periode(now()->toDateString())
-            ->ringkasan([
-                'Jumlah Jenis Barang' => number_format($produk->count(), 0, ',', '.'),
-                'Nilai Persediaan' => Laporan::format($baris->sum('nilai'), 'rupiah'),
-                'Barang Stok Menipis' => number_format($menipis, 0, ',', '.') . ' jenis',
-            ])
+            ->ringkasan($ringkasan)
             ->bagian('Rincian Persediaan', [
-                ['label' => 'Nama Produk', 'key' => 'nama', 'lebar' => 34],
-                ['label' => 'SKU', 'key' => 'sku', 'lebar' => 16],
-                ['label' => 'Kategori', 'key' => 'kategori', 'lebar' => 18],
-                ['label' => 'Lokasi Rak', 'key' => 'lokasi', 'lebar' => 16],
+                ['label' => 'Nama Produk', 'key' => 'nama', 'lebar' => 28],
+                ['label' => 'SKU', 'key' => 'sku', 'lebar' => 14],
+                ['label' => 'Kategori', 'key' => 'kategori', 'lebar' => 16],
+                ['label' => 'Lokasi Rak', 'key' => 'lokasi', 'lebar' => 14],
                 ['label' => 'Stok', 'key' => 'stok', 'format' => 'angka'],
+                ['label' => 'Satuan', 'key' => 'satuan', 'lebar' => 10],
                 ['label' => 'Min. Stok', 'key' => 'min', 'format' => 'angka'],
+                ['label' => 'Status', 'key' => 'status', 'lebar' => 12],
                 ['label' => 'Harga Modal', 'key' => 'modal', 'format' => 'rupiah'],
                 ['label' => 'Nilai Persediaan', 'key' => 'nilai', 'format' => 'rupiah'],
             ], $baris->all(), [
@@ -496,31 +535,59 @@ class LaporanEksporController extends Controller
     {
         [$dari, $sampai] = $this->rentang($request);
 
-        $kas = CashTransaction::with('user')
-            ->whereDate('created_at', '>=', $dari)
-            ->whereDate('created_at', '<=', $sampai)
-            ->orderBy('created_at')
-            ->get();
+        $type = in_array($request->type, ['in', 'out', 'sale', 'manual_in', 'manual_out', 'return'], true) ? $request->type : null;
+
+        $mutasi = Akuntansi::queryMutasiKas($dari, $sampai, $type)->get();
+
+        $userIds = $mutasi->pluck('user_id')->filter()->unique();
+        $users = User::whereIn('id', $userIds)->pluck('name', 'id');
 
         $kategori = CashTransaction::categories();
 
-        $baris = $kas->map(fn (CashTransaction $t) => [
-            'tanggal' => $t->created_at->format('d/m/Y H:i'),
-            'jenis' => $t->type === 'in' ? 'Masuk' : 'Keluar',
-            'kategori' => $kategori[$t->category] ?? $t->category,
-            'keterangan' => $t->note ?: '-',
-            'petugas' => $t->user->name ?? '-',
-            'masuk' => $t->type === 'in' ? (float) $t->amount : 0.0,
-            'keluar' => $t->type === 'out' ? (float) $t->amount : 0.0,
-        ]);
+        $baris = $mutasi->map(function ($t) use ($users, $kategori) {
+            $petugas = $users[$t->user_id] ?? '-';
+            $waktu = Carbon::parse($t->created_at)->format('d/m/Y H:i');
+
+            if ($t->source_type === 'sale') {
+                $kat = 'Penjualan (' . MetodeBayar::label($t->category) . ')';
+                $ket = 'Nota: ' . $t->note . ($t->extra_info ? ' (' . $t->extra_info . ')' : '');
+            } elseif ($t->source_type === 'sale_return') {
+                $kat = 'Retur Penjualan (Refund)';
+                $ket = 'Retur: ' . $t->note . ($t->extra_info ? ' - Alasan: ' . $t->extra_info : '');
+            } else {
+                $kat = $kategori[$t->category] ?? $t->category;
+                $ket = $t->note ?: '-';
+            }
+
+            return [
+                'tanggal' => $waktu,
+                'jenis' => $t->type === 'in' ? 'Masuk' : 'Keluar',
+                'kategori' => $kat,
+                'keterangan' => $ket,
+                'petugas' => $petugas,
+                'masuk' => $t->type === 'in' ? (float) $t->amount : 0.0,
+                'keluar' => $t->type === 'out' ? (float) $t->amount : 0.0,
+            ];
+        });
+
+        $ringkasan = [];
+        if ($type === 'in' || $type === 'sale' || $type === 'manual_in') {
+            $ringkasan['Filter Tipe'] = 'Kas Masuk';
+            $ringkasan['Jumlah Transaksi'] = number_format($baris->count(), 0, ',', '.');
+            $ringkasan['Total Kas Masuk'] = Laporan::format($baris->sum('masuk'), 'rupiah');
+        } elseif ($type === 'out' || $type === 'manual_out' || $type === 'return') {
+            $ringkasan['Filter Tipe'] = 'Kas Keluar';
+            $ringkasan['Jumlah Transaksi'] = number_format($baris->count(), 0, ',', '.');
+            $ringkasan['Total Kas Keluar'] = Laporan::format($baris->sum('keluar'), 'rupiah');
+        } else {
+            $ringkasan['Total Kas Masuk'] = Laporan::format($baris->sum('masuk'), 'rupiah');
+            $ringkasan['Total Kas Keluar'] = Laporan::format($baris->sum('keluar'), 'rupiah');
+            $ringkasan['Saldo (Masuk - Keluar)'] = Laporan::format($baris->sum('masuk') - $baris->sum('keluar'), 'rupiah');
+        }
 
         return Laporan::buat('Laporan Kas Masuk & Keluar', 'kas')
             ->periode($dari, $sampai)
-            ->ringkasan([
-                'Total Kas Masuk' => Laporan::format($baris->sum('masuk'), 'rupiah'),
-                'Total Kas Keluar' => Laporan::format($baris->sum('keluar'), 'rupiah'),
-                'Selisih' => Laporan::format($baris->sum('masuk') - $baris->sum('keluar'), 'rupiah'),
-            ])
+            ->ringkasan($ringkasan)
             ->bagian('Rincian Mutasi Kas', [
                 ['label' => 'Waktu', 'key' => 'tanggal', 'lebar' => 18],
                 ['label' => 'Jenis', 'key' => 'jenis', 'lebar' => 10],
@@ -535,7 +602,7 @@ class LaporanEksporController extends Controller
                 'keluar' => $baris->sum('keluar'),
             ])
             ->catatan(
-                'Buku ini HANYA memuat pergerakan uang di luar penjualan. Uang tunai dari transaksi kasir tidak muncul di sini - lihat Laporan Omset.',
+                'Buku ini memuat seluruh mutasi kas: penerimaan penjualan kasir, pengembalian retur, dan transaksi kas operasional.',
                 'Kategori Pembelian Barang dan Beli Peralatan TIDAK mengurangi laba: uangnya berubah wujud jadi stok atau peralatan.',
                 self::CATATAN_MODAL,
             );
@@ -545,8 +612,17 @@ class LaporanEksporController extends Controller
 
     private function laporanHutang(Request $request): Laporan
     {
+        $q = trim((string) $request->q);
+
         $nota = Purchase::with('supplier')
             ->where('sisa_hutang', '>', 0)
+            ->when($q !== '', function ($query) use ($q) {
+                $query->where(function ($sub) use ($q) {
+                    $sub->where('purchase_no', 'like', "%{$q}%")
+                        ->orWhere('supplier_invoice_no', 'like', "%{$q}%")
+                        ->orWhereHas('supplier', fn ($s) => $s->where('name', 'like', "%{$q}%"));
+                });
+            })
             ->orderBy('due_date')
             ->orderBy('purchase_date')
             ->get();
@@ -557,8 +633,13 @@ class LaporanEksporController extends Controller
             $umur = (int) $p->purchase_date->diffInDays($hariIni);
             $jatuhTempo = $p->due_date;
 
+            $notaLabel = $p->purchase_no;
+            if ($p->supplier_invoice_no) {
+                $notaLabel .= ' (' . $p->supplier_invoice_no . ')';
+            }
+
             return [
-                'nota' => $p->purchase_no,
+                'nota' => $notaLabel,
                 'pemasok' => $p->supplier->name ?? '-',
                 'tanggal' => $p->purchase_date->toDateString(),
                 'jatuh_tempo' => $jatuhTempo?->toDateString(),
@@ -574,17 +655,23 @@ class LaporanEksporController extends Controller
 
         $lewatTempo = $baris->filter(fn ($b) => str_starts_with($b['status'], 'LEWAT'));
 
+        $ringkasan = [
+            'Jumlah Nota Belum Lunas' => number_format($baris->count(), 0, ',', '.'),
+            'Total Sisa Hutang' => Laporan::format($baris->sum('sisa'), 'rupiah'),
+            'Sudah Lewat Jatuh Tempo' => number_format($lewatTempo->count(), 0, ',', '.') . ' nota ('
+                . Laporan::format($lewatTempo->sum('sisa'), 'rupiah') . ')',
+        ];
+
+        if ($q !== '') {
+            $ringkasan['Pencarian'] = $q;
+        }
+
         return Laporan::buat('Laporan Hutang Usaha', 'hutang-usaha')
             ->periode(now()->toDateString())
-            ->ringkasan([
-                'Jumlah Nota Belum Lunas' => number_format($baris->count(), 0, ',', '.'),
-                'Total Sisa Hutang' => Laporan::format($baris->sum('sisa'), 'rupiah'),
-                'Sudah Lewat Jatuh Tempo' => number_format($lewatTempo->count(), 0, ',', '.') . ' nota ('
-                    . Laporan::format($lewatTempo->sum('sisa'), 'rupiah') . ')',
-            ])
+            ->ringkasan($ringkasan)
             ->bagian('Rincian Hutang per Nota', [
-                ['label' => 'No. Nota', 'key' => 'nota', 'lebar' => 20],
-                ['label' => 'Pemasok', 'key' => 'pemasok', 'lebar' => 28],
+                ['label' => 'No. Nota', 'key' => 'nota', 'lebar' => 22],
+                ['label' => 'Pemasok', 'key' => 'pemasok', 'lebar' => 26],
                 ['label' => 'Tgl. Beli', 'key' => 'tanggal', 'format' => 'tanggal', 'lebar' => 14],
                 ['label' => 'Jatuh Tempo', 'key' => 'jatuh_tempo', 'format' => 'tanggal', 'lebar' => 14],
                 ['label' => 'Status', 'key' => 'status', 'lebar' => 20],
@@ -609,8 +696,13 @@ class LaporanEksporController extends Controller
 
     private function laporanPiutang(Request $request): Laporan
     {
-        $pesanan = Sale::with('customer')
+        $q = trim((string) $request->q);
+        $metode = in_array($request->metode, MetodeBayar::kunci(), true) ? $request->metode : null;
+
+        $pesanan = Sale::with(['customer', 'payments'])
             ->where('order_status', 'waiting')
+            ->when($q !== '', fn ($query) => $query->where('invoice_no', 'like', "%{$q}%"))
+            ->when($metode, fn ($query) => $query->whereHas('payments', fn ($p) => $p->where('method', $metode)))
             ->orderBy('due_date')
             ->orderBy('created_at')
             ->get();
@@ -621,11 +713,16 @@ class LaporanEksporController extends Controller
             $sisa = max((float) $s->total - (float) $s->paid_amount, 0);
             $tempo = $s->due_date ? Carbon::parse($s->due_date) : null;
 
+            $metodeLabel = $s->payments->isEmpty()
+                ? 'Belum bayar'
+                : $s->payments->map(fn ($b) => MetodeBayar::label($b->method))->unique()->implode(', ');
+
             return [
                 'invoice' => $s->invoice_no,
                 'pelanggan' => $s->customer->name ?? 'Umum',
                 'tanggal' => $s->created_at->toDateString(),
                 'jatuh_tempo' => $tempo?->toDateString(),
+                'metode' => $metodeLabel,
                 'status' => $tempo && $tempo->lt($hariIni)
                     ? 'LEWAT ' . (int) $tempo->diffInDays($hariIni) . ' hari'
                     : ($tempo ? 'Belum jatuh tempo' : 'Tanpa tempo'),
@@ -635,19 +732,29 @@ class LaporanEksporController extends Controller
             ];
         });
 
+        $ringkasan = [
+            'Jumlah Pesanan Belum Lunas' => number_format($baris->count(), 0, ',', '.'),
+            'Total Uang Muka Diterima' => Laporan::format($baris->sum('dp'), 'rupiah'),
+            'Total Sisa Tagihan' => Laporan::format($baris->sum('sisa'), 'rupiah'),
+        ];
+
+        if ($metode) {
+            $ringkasan['Filter Metode DP'] = MetodeBayar::label($metode);
+        }
+        if ($q !== '') {
+            $ringkasan['Pencarian'] = $q;
+        }
+
         return Laporan::buat('Laporan Piutang Pesanan', 'piutang')
             ->periode(now()->toDateString())
-            ->ringkasan([
-                'Jumlah Pesanan Belum Lunas' => number_format($baris->count(), 0, ',', '.'),
-                'Total Uang Muka Diterima' => Laporan::format($baris->sum('dp'), 'rupiah'),
-                'Total Sisa Tagihan' => Laporan::format($baris->sum('sisa'), 'rupiah'),
-            ])
+            ->ringkasan($ringkasan)
             ->bagian('Rincian Pesanan Belum Lunas', [
-                ['label' => 'No. Invoice', 'key' => 'invoice', 'lebar' => 20],
-                ['label' => 'Pelanggan', 'key' => 'pelanggan', 'lebar' => 28],
-                ['label' => 'Tgl. Pesan', 'key' => 'tanggal', 'format' => 'tanggal', 'lebar' => 14],
-                ['label' => 'Jatuh Tempo', 'key' => 'jatuh_tempo', 'format' => 'tanggal', 'lebar' => 14],
-                ['label' => 'Status', 'key' => 'status', 'lebar' => 20],
+                ['label' => 'No. Invoice', 'key' => 'invoice', 'lebar' => 18],
+                ['label' => 'Pelanggan', 'key' => 'pelanggan', 'lebar' => 24],
+                ['label' => 'Tgl. Pesan', 'key' => 'tanggal', 'format' => 'tanggal', 'lebar' => 13],
+                ['label' => 'Jatuh Tempo', 'key' => 'jatuh_tempo', 'format' => 'tanggal', 'lebar' => 13],
+                ['label' => 'Metode DP', 'key' => 'metode', 'lebar' => 16],
+                ['label' => 'Status', 'key' => 'status', 'lebar' => 18],
                 ['label' => 'Nilai Pesanan', 'key' => 'total', 'format' => 'rupiah'],
                 ['label' => 'Uang Muka', 'key' => 'dp', 'format' => 'rupiah'],
                 ['label' => 'Sisa Tagihan', 'key' => 'sisa', 'format' => 'rupiah'],

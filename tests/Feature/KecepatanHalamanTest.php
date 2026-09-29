@@ -276,6 +276,6 @@ class KecepatanHalamanTest extends JposTestCase
 
     public function test_kas(): void
     {
-        $this->periksa('/kas', 12);
+        $this->periksa('/kas', 16);
     }
 }

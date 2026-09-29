@@ -169,6 +169,31 @@ class TahanTransaksiTest extends JposTestCase
         $this->assertCount(0, Sale::tertahan()->get());
     }
 
+    public function test_mengambil_kembali_mempertahankan_pelanggan_dan_diskon(): void
+    {
+        $cust = \App\Models\Customer::create(['name' => 'Pelanggan Uji', 'phone' => '081234']);
+
+        $this->actingAs($this->kasir)->postJson('/kasir', [
+            'items' => [['product_id' => $this->produk->id, 'qty' => 2]],
+            'paid_amount' => 0,
+            'payment_method' => 'cash',
+            'customer_id' => $cust->id,
+            'discount' => 1500,
+            'note' => 'Ditahan sebentar',
+            'is_parked' => true,
+        ])->assertOk();
+
+        $sale = Sale::latest('id')->firstOrFail();
+
+        $response = $this->actingAs($this->kasir)
+            ->post(route('kasir.tahan.ambil', $sale))
+            ->assertRedirect(route('kasir.index'));
+
+        $this->assertSame($cust->id, $response->getSession()->get('kasir_customer_id'));
+        $this->assertEqualsWithDelta(1500, (float) $response->getSession()->get('kasir_discount'), 0.01);
+        $this->assertSame('Ditahan sebentar', $response->getSession()->get('kasir_note'));
+    }
+
     // -----------------------------------------------------------------
     // Pembukuan tidak boleh bergeser
     // -----------------------------------------------------------------

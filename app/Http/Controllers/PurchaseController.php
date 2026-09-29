@@ -7,7 +7,6 @@ use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
 use App\Models\PurchasePayment;
-use App\Models\Setting;
 use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Support\Angka;
@@ -33,20 +32,26 @@ class PurchaseController extends Controller
 {
     public function index(Request $request)
     {
-        $purchases = Purchase::with(['supplier', 'items'])
+        $purchases = Purchase::with(['supplier', 'items', 'payments.user', 'user'])
             ->when($request->q, fn ($q) => $q->where(function ($sub) use ($request) {
                 $sub->where('purchase_no', 'like', "%{$request->q}%")
                     ->orWhere('supplier_invoice_no', 'like', "%{$request->q}%")
                     ->orWhereHas('supplier', fn ($s) => $s->where('name', 'like', "%{$request->q}%"));
             }))
+            ->when($request->supplier_id, fn ($q) => $q->where('supplier_id', $request->supplier_id))
+            ->when($request->periode === 'hari_ini', fn ($q) => $q->whereDate('purchase_date', today()))
+            ->when($request->periode === '7_hari', fn ($q) => $q->where('purchase_date', '>=', now()->subDays(7)->startOfDay()))
+            ->when($request->periode === 'bulan_ini', fn ($q) => $q->whereMonth('purchase_date', now()->month)->whereYear('purchase_date', now()->year))
             ->when($request->status === 'hutang', fn ($q) => $q->where('sisa_hutang', '>', 0))
             ->when($request->status === 'lunas', fn ($q) => $q->where('sisa_hutang', '<=', 0))
+            ->when($request->status === 'tempo', fn ($q) => $q->where('sisa_hutang', '>', 0)->whereNotNull('due_date')->whereDate('due_date', '<', now()))
             ->orderByDesc('purchase_date')
             ->orderByDesc('id')
             ->paginate(15)
             ->withQueryString();
 
         $ringkasan = (object) [
+            'total_bulan_ini' => Angka::bulat(Purchase::whereMonth('purchase_date', now()->month)->whereYear('purchase_date', now()->year)->sum('total')),
             'total_hutang' => Angka::bulat(Purchase::where('sisa_hutang', '>', 0)->sum('sisa_hutang')),
             'jumlah_nota_hutang' => Purchase::where('sisa_hutang', '>', 0)->count(),
             'jatuh_tempo' => Purchase::where('sisa_hutang', '>', 0)
@@ -62,12 +67,18 @@ class PurchaseController extends Controller
                 'id' => $p->id,
                 'name' => $p->name,
                 'sku' => $p->sku,
+                'barcode' => $p->barcode,
                 'unit' => $p->unit,
-                'cost_price' => (float) $p->cost_price,
+                'stock' => (float) ($p->stock ?? 0),
+                'cost_price' => (float) ($p->cost_price ?? 0),
+                'sell_price' => (float) ($p->sell_price ?? 0),
                 'units' => $p->units->map(fn ($pu) => [
                     'id' => $pu->id,
                     'name' => $pu->unit->name,
                     'conversion' => (float) $pu->conversion,
+                    'barcode' => $pu->barcode,
+                    'cost_price' => $pu->cost_price !== null ? (float) $pu->cost_price : (float) (($p->cost_price ?? 0) * $pu->conversion),
+                    'price' => $pu->price !== null ? (float) $pu->price : (float) (($p->sell_price ?? 0) * $pu->conversion),
                 ])->values()->all(),
             ])->values();
 
@@ -93,6 +104,12 @@ class PurchaseController extends Controller
             'items.*.qty' => ['required', 'numeric', 'min:0.0001'],
             'items.*.unit_type' => ['nullable', 'string'],
             'items.*.price' => ['required', 'numeric', 'min:0'],
+            'items.*.sell_price' => ['nullable', 'numeric', 'min:0'],
+            'other_unit_prices' => ['nullable', 'array'],
+            'other_unit_prices.*.product_id' => ['required', 'exists:products,id'],
+            'other_unit_prices.*.unit_type' => ['required', 'string'],
+            'other_unit_prices.*.sell_price' => ['nullable', 'numeric', 'min:0'],
+            'other_unit_prices.*.cost_price' => ['nullable', 'numeric', 'min:0'],
             'bayar' => ['required', 'in:tunai,hutang'],
             'paid_amount' => ['nullable', 'numeric', 'min:0'],
             'due_date' => ['nullable', 'date'],
@@ -106,8 +123,13 @@ class PurchaseController extends Controller
             $baris = [];
             $subtotal = 0.0;
 
+            $loadedProducts = [];
             foreach ($data['items'] as $item) {
-                $product = Product::lockForUpdate()->findOrFail($item['product_id']);
+                $pid = (int) $item['product_id'];
+                if (!isset($loadedProducts[$pid])) {
+                    $loadedProducts[$pid] = Product::lockForUpdate()->findOrFail($pid);
+                }
+                $product = $loadedProducts[$pid];
                 ['conversion' => $konversi, 'label' => $label] = $this->satuanPembelian($product, $item['unit_type'] ?? 'base');
 
                 $nilai = Angka::bulat((float) $item['qty'] * (float) $item['price']);
@@ -119,6 +141,8 @@ class PurchaseController extends Controller
                     'konversi' => $konversi,
                     'label' => $label,
                     'price' => (float) $item['price'],
+                    'sell_price' => isset($item['sell_price']) && $item['sell_price'] !== '' ? (float) $item['sell_price'] : null,
+                    'unit_type' => $item['unit_type'] ?? 'base',
                     'subtotal' => $nilai,
                 ];
             }
@@ -171,6 +195,55 @@ class PurchaseController extends Controller
                 ]);
 
                 $this->perbaruiHargaModal($b, $subtotal, $biayaLain, $qtySatuanDasar);
+
+                if ($b['sell_price'] !== null && $b['sell_price'] > 0) {
+                    if ($b['unit_type'] === 'base' || $b['unit_type'] === '') {
+                        $b['product']->sell_price = $b['sell_price'];
+                        $b['product']->save();
+                    } elseif (str_starts_with($b['unit_type'], 'unit_')) {
+                        $unitId = (int) substr($b['unit_type'], 5);
+                        $productUnit = $b['product']->units()->find($unitId);
+                        if ($productUnit) {
+                            $productUnit->price = $b['sell_price'];
+                            if ($b['price'] > 0) {
+                                $productUnit->cost_price = $b['price'];
+                            }
+                            $productUnit->save();
+                        }
+                    }
+                } elseif (str_starts_with($b['unit_type'], 'unit_') && $b['price'] > 0) {
+                    $unitId = (int) substr($b['unit_type'], 5);
+                    $productUnit = $b['product']->units()->find($unitId);
+                    if ($productUnit) {
+                        $productUnit->cost_price = $b['price'];
+                        $productUnit->save();
+                    }
+                }
+            }
+
+            if (!empty($data['other_unit_prices'])) {
+                foreach ($data['other_unit_prices'] as $oup) {
+                    $sellPrice = isset($oup['sell_price']) && $oup['sell_price'] !== '' ? (float) $oup['sell_price'] : null;
+                    if ($sellPrice === null || $sellPrice <= 0) continue;
+
+                    $p = $loadedProducts[$oup['product_id']] ?? Product::find($oup['product_id']);
+                    if (!$p) continue;
+
+                    if ($oup['unit_type'] === 'base' || $oup['unit_type'] === '') {
+                        $p->sell_price = $sellPrice;
+                        $p->save();
+                    } elseif (str_starts_with($oup['unit_type'], 'unit_')) {
+                        $uId = (int) substr($oup['unit_type'], 5);
+                        $pu = $p->units()->find($uId);
+                        if ($pu) {
+                            $pu->price = $sellPrice;
+                            if (isset($oup['cost_price']) && (float) $oup['cost_price'] > 0) {
+                                $pu->cost_price = (float) $oup['cost_price'];
+                            }
+                            $pu->save();
+                        }
+                    }
+                }
             }
 
             if ($dibayar > 0) {
@@ -183,7 +256,10 @@ class PurchaseController extends Controller
         // Harga modal berubah, jadi katalog kasir harus dibangun ulang.
         $catalog->flush();
 
-        return back()->with('success', "Pembelian {$purchase->purchase_no} tersimpan. Stok sudah bertambah.");
+        return back()
+            ->with('success', "Pembelian {$purchase->purchase_no} tersimpan. Stok sudah bertambah.")
+            ->with('last_purchase_id', $purchase->id)
+            ->with('last_purchase_no', $purchase->purchase_no);
     }
 
     /**
@@ -352,14 +428,13 @@ class PurchaseController extends Controller
         ]);
     }
 
+    /**
+     * Menampilkan lembar cetak faktur pembelian / bukti barang masuk (GRN).
+     * Siap dicetak format standar kertas A4 ataupun struk ringkas.
+     */
     public function cetak(Purchase $purchase)
     {
         $purchase->load(['supplier', 'items.product', 'payments.user', 'user']);
-        $storeProfile = Setting::get('store_profile', [
-            'name' => config('app.name', 'JPOS'),
-            'address' => '',
-            'phone' => '',
-        ]);
-        return view('transaksi.pembelian.cetak', compact('purchase', 'storeProfile'));
+        return view('transaksi.pembelian.cetak', compact('purchase'));
     }
 }

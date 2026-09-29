@@ -75,7 +75,7 @@ class ProductCatalog
             ])
             ->all();
 
-        return Product::with('units.unit')
+        return Product::with(['units.unit', 'category'])
             ->where('is_active', true)
             ->orderBy('name')
             ->get()

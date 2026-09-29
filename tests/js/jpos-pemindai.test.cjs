@@ -22,7 +22,7 @@ function cek(nama, syarat) {
 }
 
 /** DOM sekadarnya - cukup untuk menjalankan berkasnya, tanpa memasang pustaka apa pun. */
-function jalankanDenganKolom(atribut) {
+function jalankanDenganKolom(atribut, jedaMs = 10) {
     const pendengar = [];
     const kolom = {
         tagName: 'INPUT',
@@ -57,7 +57,7 @@ function jalankanDenganKolom(atribut) {
     // Tembakkan rentetan cepat lalu Enter - persis ritme alat pindai.
     let waktu = 1000;
     const kirim = (key) => {
-        waktu += 10;
+        waktu += jedaMs;
         let dicegah = false;
         const ev = {
             key, timeStamp: waktu,
@@ -86,6 +86,14 @@ cek('kolom biasa: Enter dicegah supaya tidak memicu apa pun',
     biasa.enterDicegah === true);
 cek('kolom biasa: isi kolom dikembalikan (barcode tidak jadi nominal)',
     biasa.nilaiKolom === 'ISI-SEMULA');
+
+// --- Scanner fisik dengan latensi 40ms: pindaian TETAP DITANGKAP (ambang 50ms) ----
+const scanner40ms = jalankanDenganKolom({ name: 'paid_amount' }, 40);
+
+cek('scanner 40ms: peristiwa pindaian tetap tertangkap',
+    scanner40ms.peristiwa.length === 1 && scanner40ms.peristiwa[0].type === 'jpos:barcode-dipindai');
+cek('scanner 40ms: kodenya utuh terbawa',
+    scanner40ms.peristiwa[0] && scanner40ms.peristiwa[0].detail.kode === '8991234567890');
 
 // --- Kolom barcode produk: pindaian DIBIARKAN -------------------------------------
 const produk = jalankanDenganKolom({ name: 'barcode' });
