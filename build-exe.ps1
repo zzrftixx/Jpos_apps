@@ -341,7 +341,7 @@ SalinBersih (Join-Path $RootDir "database\migrations") (Join-Path $TargetDir "da
 SalinBersih (Join-Path $RootDir "database\seeders")    (Join-Path $TargetDir "database\seeders")
 SalinBersih (Join-Path $RootDir "database\factories")  (Join-Path $TargetDir "database\factories")
 
-foreach ($file in @("artisan", "server.php", "composer.json", "composer.lock", "VERSION", "README_JPOS.md", ".env.example")) {
+foreach ($file in @("artisan", "server.php", "composer.json", "composer.lock", "VERSION", "README_JPOS.md", ".env.example", "KELOLA-SHIFT-KASIR.bat")) {
     $src = Join-Path $RootDir $file
     if (Test-Path $src) { Copy-Item -Path $src -Destination (Join-Path $TargetDir $file) -Force }
 }
@@ -771,7 +771,7 @@ foreach ($folder in @("app", "config", "lang", "public", "resources", "routes", 
     $src = Join-Path $TargetDir $folder
     if (Test-Path $src) { SalinBersih $src (Join-Path $UpdateBaru $folder) }
 }
-foreach ($file in @("artisan", "server.php", "composer.json", "composer.lock", "VERSION", "README_JPOS.md", "JPOS.exe", "PULIHKAN-LOGIN.bat", "BUKA-FIREWALL-LAN.bat")) {
+foreach ($file in @("artisan", "server.php", "composer.json", "composer.lock", "VERSION", "README_JPOS.md", "JPOS.exe", "PULIHKAN-LOGIN.bat", "BUKA-FIREWALL-LAN.bat", "KELOLA-SHIFT-KASIR.bat")) {
     Copy-Item -Path (Join-Path $TargetDir $file) -Destination (Join-Path $UpdateBaru $file) -Force
 }
 New-Item -ItemType Directory -Path (Join-Path $UpdateBaru "php") -Force | Out-Null
