@@ -17,6 +17,7 @@ use App\Support\Laporan;
 use App\Support\MetodeBayar;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Satu pintu ekspor untuk sepuluh laporan.
@@ -438,6 +439,103 @@ class LaporanEksporController extends Controller
                 'Nilai persediaan = stok x harga modal terkini. Angka ini yang masuk sebagai pos Persediaan di Neraca.',
                 'Produk jasa tidak ditampilkan karena tidak punya stok fisik.',
                 'Lokasi rak diambil dari Planogram. Tanda "-" berarti produknya belum ditaruh di rak mana pun.',
+            );
+    }
+
+    /* =================================================================== MUTASI STOK */
+
+    private function laporanMutasiStok(Request $request): Laporan
+    {
+        [$dari, $sampai] = $this->rentang($request);
+        $q = trim((string) $request->q);
+        $categoryId = $request->category_id;
+        $hanyaAdaMutasi = $request->boolean('hanya_ada_mutasi');
+
+        $beliSub = DB::table('purchase_items')
+            ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
+            ->whereDate('purchases.purchase_date', '>=', $dari)
+            ->whereDate('purchases.purchase_date', '<=', $sampai)
+            ->select('purchase_items.product_id', DB::raw('SUM(purchase_items.qty * COALESCE(purchase_items.unit_conversion, 1)) as total_beli'))
+            ->groupBy('purchase_items.product_id');
+
+        $jualSub = DB::table('sale_items')
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->where('sales.order_status', '=', 'completed')
+            ->whereDate('sales.created_at', '>=', $dari)
+            ->whereDate('sales.created_at', '<=', $sampai)
+            ->select('sale_items.product_id', DB::raw('SUM((sale_items.qty - COALESCE(sale_items.returned_qty, 0)) * COALESCE(sale_items.unit_conversion, 1)) as total_jual'))
+            ->groupBy('sale_items.product_id');
+
+        $query = Product::query()
+            ->with('category')
+            ->where('type', 'barang')
+            ->leftJoinSub($beliSub, 'beli', fn ($join) => $join->on('products.id', '=', 'beli.product_id'))
+            ->leftJoinSub($jualSub, 'jual', fn ($join) => $join->on('products.id', '=', 'jual.product_id'))
+            ->select(
+                'products.*',
+                DB::raw('COALESCE(beli.total_beli, 0) as total_masuk'),
+                DB::raw('COALESCE(jual.total_jual, 0) as total_keluar')
+            );
+
+        if ($q !== '') {
+            $query->where(function ($w) use ($q) {
+                $w->where('products.name', 'like', "%{$q}%")
+                  ->orWhere('products.barcode', 'like', "%{$q}%");
+            });
+        }
+
+        if ($categoryId) {
+            $query->where('products.category_id', $categoryId);
+        }
+
+        if ($hanyaAdaMutasi) {
+            $query->where(function ($w) {
+                $w->where('beli.total_beli', '>', 0)
+                  ->orWhere('jual.total_jual', '>', 0);
+            });
+        }
+
+        $produk = $query->orderBy('products.name')->get();
+
+        $baris = $produk->map(fn (Product $p) => [
+            'nama' => $p->name,
+            'barcode' => $p->barcode ?: '-',
+            'kategori' => $p->category->name ?? '-',
+            'satuan' => $p->unit ?: 'Pcs',
+            'masuk' => (float) $p->total_masuk,
+            'keluar' => (float) $p->total_keluar,
+            'stok' => (float) $p->stock,
+        ]);
+
+        $ringkasan = [
+            'Total Jenis Produk' => number_format($baris->count(), 0, ',', '.'),
+            'Total Qty Kulakan Masuk' => number_format($baris->sum('masuk'), 2, ',', '.'),
+            'Total Qty Terjual Keluar' => number_format($baris->sum('keluar'), 2, ',', '.'),
+            'Total Sisa Stok' => number_format($baris->sum('stok'), 2, ',', '.'),
+        ];
+
+        return Laporan::buat('Laporan Rekap Mutasi Stok', 'mutasi-stok')
+            ->periode($dari, $sampai)
+            ->ringkasan($ringkasan)
+            ->bagian('Rincian Mutasi Barang', [
+                ['label' => 'Nama Produk', 'key' => 'nama', 'lebar' => 32],
+                ['label' => 'Barcode', 'key' => 'barcode', 'lebar' => 16],
+                ['label' => 'Kategori', 'key' => 'kategori', 'lebar' => 16],
+                ['label' => 'Satuan', 'key' => 'satuan', 'lebar' => 10],
+                ['label' => 'Masuk (Beli)', 'key' => 'masuk', 'format' => 'angka'],
+                ['label' => 'Keluar (Jual)', 'key' => 'keluar', 'format' => 'angka'],
+                ['label' => 'Sisa Stok', 'key' => 'stok', 'format' => 'angka'],
+            ], $baris->all(), [
+                'nama' => 'TOTAL',
+                'masuk' => $baris->sum('masuk'),
+                'keluar' => $baris->sum('keluar'),
+                'stok' => $baris->sum('stok'),
+            ])
+            ->catatan(
+                'Barang Masuk dihitung dari seluruh nota pembelian distributor pada rentang tanggal terpilih.',
+                'Barang Keluar dihitung dari seluruh penjualan berstatus selesai dikurangi retur pada rentang tanggal terpilih.',
+                'Sisa Stok menunjukkan posisi fisik stok saat ini yang siap dijual di toko.',
+                'Produk jasa tidak ditampilkan karena tidak memiliki pergerakan fisik barang.'
             );
     }
 

@@ -4,6 +4,19 @@
 @section('content')
 @include('laporan._tabs')
 
+<div class="flex justify-end mb-4">
+    @include('laporan._ekspor', [
+        'jenis' => 'mutasi-stok',
+        'filter' => array_filter([
+            'from' => $from,
+            'to' => $to,
+            'category_id' => request('category_id'),
+            'q' => request('q'),
+            'hanya_ada_mutasi' => request('hanya_ada_mutasi'),
+        ])
+    ])
+</div>
+
 {{-- Filter & Rentang Tanggal --}}
 <form method="GET" class="flex flex-wrap items-end gap-3 mb-4">
     <div>

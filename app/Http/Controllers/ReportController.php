@@ -242,11 +242,12 @@ class ReportController extends Controller
             ->where('sales.order_status', '=', 'completed')
             ->whereDate('sales.created_at', '>=', $from)
             ->whereDate('sales.created_at', '<=', $to)
-            ->select('sale_items.product_id', DB::raw('SUM(sale_items.qty * COALESCE(sale_items.unit_conversion, 1)) as total_jual'))
+            ->select('sale_items.product_id', DB::raw('SUM((sale_items.qty - COALESCE(sale_items.returned_qty, 0)) * COALESCE(sale_items.unit_conversion, 1)) as total_jual'))
             ->groupBy('sale_items.product_id');
 
         $query = Product::query()
             ->with('category')
+            ->where('products.type', 'barang')
             ->leftJoinSub($beliSub, 'beli', function ($join) {
                 $join->on('products.id', '=', 'beli.product_id');
             })

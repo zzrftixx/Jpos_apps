@@ -84,6 +84,7 @@ class EksporLaporanTest extends JposTestCase
             'hutang' => ['hutang'],
             'piutang' => ['piutang'],
             'shift' => ['shift'],
+            'mutasi stok' => ['mutasi-stok'],
         ];
     }
 
