@@ -286,4 +286,58 @@ class RekapPembelianProdukTest extends JposTestCase
         $response->assertSee('52');
         $response->assertSee('520.000');
     }
+
+    public function test_ekspor_pdf_rekap_pembelian_berhasil(): void
+    {
+        $produk = $this->makeProduct(['name' => 'Cat Choize Salmon 800g']);
+        $nota = Purchase::create([
+            'purchase_no' => 'PB-PDF-01',
+            'purchase_date' => now()->toDateString(),
+            'total' => 150000,
+            'paid_amount' => 150000,
+            'sisa_hutang' => 0,
+            'user_id' => $this->admin->id,
+        ]);
+        PurchaseItem::create([
+            'purchase_id' => $nota->id,
+            'product_id' => $produk->id,
+            'product_name' => $produk->name,
+            'qty' => 5,
+            'unit_label' => 'Bungkus',
+            'unit_conversion' => 1,
+            'price' => 30000,
+            'subtotal' => 150000,
+        ]);
+
+        $response = $this->actingAs($this->admin)->get('/laporan/ekspor/rekap-pembelian/pdf');
+        $response->assertOk();
+        $this->assertStringContainsString('application/pdf', $response->headers->get('Content-Type') ?? '');
+    }
+
+    public function test_ekspor_excel_rekap_pembelian_berhasil(): void
+    {
+        $produk = $this->makeProduct(['name' => 'Bolt Tuna 1kg']);
+        $nota = Purchase::create([
+            'purchase_no' => 'PB-XLS-01',
+            'purchase_date' => now()->toDateString(),
+            'total' => 200000,
+            'paid_amount' => 200000,
+            'sisa_hutang' => 0,
+            'user_id' => $this->admin->id,
+        ]);
+        PurchaseItem::create([
+            'purchase_id' => $nota->id,
+            'product_id' => $produk->id,
+            'product_name' => $produk->name,
+            'qty' => 10,
+            'unit_label' => 'Sak',
+            'unit_conversion' => 1,
+            'price' => 20000,
+            'subtotal' => 200000,
+        ]);
+
+        $response = $this->actingAs($this->admin)->get('/laporan/ekspor/rekap-pembelian/xlsx');
+        $response->assertOk();
+        $this->assertStringContainsString('openxmlformats-officedocument.spreadsheetml.sheet', $response->headers->get('Content-Type') ?? '');
+    }
 }

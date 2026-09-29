@@ -539,6 +539,123 @@ class LaporanEksporController extends Controller
             );
     }
 
+    /* =================================================================== REKAP PEMBELIAN */
+
+    private function laporanRekapPembelian(Request $request): Laporan
+    {
+        [$dari, $sampai] = $this->rentang($request);
+        $q = trim((string) $request->q);
+        $supplierId = $request->supplier_id;
+
+        $query = DB::table('purchase_items')
+            ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
+            ->leftJoin('products', 'products.id', '=', 'purchase_items.product_id')
+            ->leftJoin('suppliers', 'suppliers.id', '=', 'purchases.supplier_id');
+
+        if ($request->periode !== 'semua') {
+            if ($request->periode === 'hari_ini') {
+                $dari = today()->toDateString();
+                $sampai = today()->toDateString();
+            } elseif ($request->periode === '7_hari') {
+                $dari = now()->subDays(7)->toDateString();
+                $sampai = today()->toDateString();
+            } elseif ($request->periode === 'bulan_lalu') {
+                $dari = now()->subMonth()->startOfMonth()->toDateString();
+                $sampai = now()->subMonth()->endOfMonth()->toDateString();
+            } elseif ($request->periode === 'bulan_ini' || empty($request->periode)) {
+                if (! $request->filled('from')) {
+                    $dari = now()->startOfMonth()->toDateString();
+                    $sampai = now()->endOfMonth()->toDateString();
+                }
+            }
+
+            if ($dari && $sampai) {
+                $query->whereDate('purchases.purchase_date', '>=', $dari)
+                      ->whereDate('purchases.purchase_date', '<=', $sampai);
+            }
+        } else {
+            $dari = null;
+            $sampai = null;
+        }
+
+        if ($supplierId) {
+            $query->where('purchases.supplier_id', $supplierId);
+        }
+
+        if ($q !== '') {
+            $query->where(function ($w) use ($q) {
+                $w->where('purchase_items.product_name', 'like', "%{$q}%")
+                  ->orWhere('products.name', 'like', "%{$q}%")
+                  ->orWhere('products.barcode', 'like', "%{$q}%")
+                  ->orWhere('products.sku', 'like', "%{$q}%");
+            });
+        }
+
+        $items = $query
+            ->select(
+                'purchase_items.product_id',
+                DB::raw('COALESCE(products.name, purchase_items.product_name) as nama_produk'),
+                DB::raw('COALESCE(products.barcode, "-") as barcode'),
+                DB::raw('COALESCE(products.sku, "-") as sku'),
+                DB::raw('COALESCE(products.unit, purchase_items.unit_label) as satuan_dasar'),
+                DB::raw('COALESCE(products.stock, 0) as sisa_stok_toko'),
+                DB::raw('SUM(purchase_items.qty * COALESCE(purchase_items.unit_conversion, 1)) as total_base_qty'),
+                DB::raw('SUM(purchase_items.subtotal) as total_nominal'),
+                DB::raw('COUNT(DISTINCT purchase_items.purchase_id) as jumlah_faktur'),
+                DB::raw('MAX(purchases.purchase_date) as tgl_faktur_terakhir')
+            )
+            ->groupBy('purchase_items.product_id', 'nama_produk', 'barcode', 'sku', 'satuan_dasar', 'sisa_stok_toko')
+            ->orderByDesc('total_nominal')
+            ->get();
+
+        $baris = $items->map(fn ($p) => [
+            'nama' => $p->nama_produk,
+            'barcode' => $p->barcode ?: '-',
+            'satuan' => $p->satuan_dasar ?: 'Pcs',
+            'qty_masuk' => (float) $p->total_base_qty,
+            'avg_modal' => (float) ($p->total_base_qty > 0 ? round($p->total_nominal / $p->total_base_qty, 2) : 0),
+            'total_nominal' => (float) $p->total_nominal,
+            'jumlah_faktur' => (int) $p->jumlah_faktur,
+            'stok_toko' => (float) $p->sisa_stok_toko,
+        ]);
+
+        $totalNominal = (float) $baris->sum('total_nominal');
+        $totalQty = (float) $baris->sum('qty_masuk');
+        $totalProduk = $baris->count();
+        $totalFaktur = (int) $baris->sum('jumlah_faktur');
+
+        $ringkasan = [
+            'Total Nilai Kulakan' => 'Rp ' . number_format($totalNominal, 0, ',', '.'),
+            'Total Jenis Produk' => number_format($totalProduk, 0, ',', '.') . ' Produk',
+            'Total Qty Masuk Fisik' => number_format($totalQty, 2, ',', '.') . ' Satuan Dasar',
+            'Total Transaksi Faktur' => number_format($totalFaktur, 0, ',', '.') . ' Faktur',
+        ];
+
+        return Laporan::buat('Laporan Rekap Pembelian Barang', 'rekap-pembelian')
+            ->periode($dari, $sampai)
+            ->ringkasan($ringkasan)
+            ->bagian('Rincian Akumulasi Belanja Barang', [
+                ['label' => 'Nama Produk', 'key' => 'nama', 'lebar' => 32],
+                ['label' => 'Barcode', 'key' => 'barcode', 'lebar' => 16],
+                ['label' => 'Satuan', 'key' => 'satuan', 'lebar' => 10],
+                ['label' => 'Total Qty Beli', 'key' => 'qty_masuk', 'format' => 'angka'],
+                ['label' => 'Rata-rata Modal', 'key' => 'avg_modal', 'format' => 'rupiah'],
+                ['label' => 'Total Belanja', 'key' => 'total_nominal', 'format' => 'rupiah'],
+                ['label' => 'Jml Faktur', 'key' => 'jumlah_faktur', 'format' => 'angka'],
+                ['label' => 'Sisa Stok Toko', 'key' => 'stok_toko', 'format' => 'angka'],
+            ], $baris->all(), [
+                'nama' => 'TOTAL',
+                'qty_masuk' => $totalQty,
+                'total_nominal' => $totalNominal,
+            ])
+            ->catatan(
+                'Kuantitas pembelian di atas adalah akumulasi murni barang masuk dari faktur supplier dalam periode terpilih.',
+                'Kuantitas ini TIDAK berkurang saat kasir menjual barang, karena berfungsi sebagai catatan belanja modal toko.',
+                'Rata-rata modal dihitung dari total nominal belanja dibagi total kuantitas satuan dasar yang masuk.',
+                'Sisa Stok Toko menunjukkan saldo fisik stok di rak toko saat ini sebagai pembanding.'
+            );
+    }
+
     /* ===================================================================== TERLARIS */
 
     private function laporanTerlaris(Request $request): Laporan
