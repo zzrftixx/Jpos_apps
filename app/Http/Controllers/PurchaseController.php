@@ -34,15 +34,15 @@ class PurchaseController extends Controller
     public function index(Request $request)
     {
         $purchases = Purchase::with(['supplier', 'items', 'payments.user', 'user'])
-            ->when($request->q, fn ($q) => $q->where(function ($sub) use ($request) {
+            ->when($request->q && $request->tab !== 'rekap_produk', fn ($q) => $q->where(function ($sub) use ($request) {
                 $sub->where('purchase_no', 'like', "%{$request->q}%")
                     ->orWhere('supplier_invoice_no', 'like', "%{$request->q}%")
                     ->orWhereHas('supplier', fn ($s) => $s->where('name', 'like', "%{$request->q}%"));
             }))
-            ->when($request->supplier_id, fn ($q) => $q->where('supplier_id', $request->supplier_id))
-            ->when($request->periode === 'hari_ini', fn ($q) => $q->whereDate('purchase_date', today()))
-            ->when($request->periode === '7_hari', fn ($q) => $q->where('purchase_date', '>=', now()->subDays(7)->startOfDay()))
-            ->when($request->periode === 'bulan_ini', fn ($q) => $q->whereMonth('purchase_date', now()->month)->whereYear('purchase_date', now()->year))
+            ->when($request->supplier_id && $request->tab !== 'rekap_produk', fn ($q) => $q->where('supplier_id', $request->supplier_id))
+            ->when($request->periode === 'hari_ini' && $request->tab !== 'rekap_produk', fn ($q) => $q->whereDate('purchase_date', today()))
+            ->when($request->periode === '7_hari' && $request->tab !== 'rekap_produk', fn ($q) => $q->where('purchase_date', '>=', now()->subDays(7)->startOfDay()))
+            ->when($request->periode === 'bulan_ini' && $request->tab !== 'rekap_produk', fn ($q) => $q->whereMonth('purchase_date', now()->month)->whereYear('purchase_date', now()->year))
             ->when($request->status === 'hutang', fn ($q) => $q->where('sisa_hutang', '>', 0))
             ->when($request->status === 'lunas', fn ($q) => $q->where('sisa_hutang', '<=', 0))
             ->when($request->status === 'tempo', fn ($q) => $q->where('sisa_hutang', '>', 0)->whereNotNull('due_date')->whereDate('due_date', '<', now()))
@@ -60,6 +60,157 @@ class PurchaseController extends Controller
                 ->whereDate('due_date', '<', now())
                 ->count(),
         ];
+
+        // Filter rentang tanggal khusus Rekap Barang Masuk / Kulakan
+        $rekapPeriode = $request->input('periode', 'bulan_ini');
+        $rekapFrom = null;
+        $rekapTo = null;
+
+        if ($rekapPeriode === 'hari_ini') {
+            $rekapFrom = today()->toDateString();
+            $rekapTo = today()->toDateString();
+        } elseif ($rekapPeriode === '7_hari') {
+            $rekapFrom = now()->subDays(7)->toDateString();
+            $rekapTo = today()->toDateString();
+        } elseif ($rekapPeriode === 'bulan_ini' || empty($rekapPeriode)) {
+            $rekapFrom = now()->startOfMonth()->toDateString();
+            $rekapTo = now()->endOfMonth()->toDateString();
+        } elseif ($rekapPeriode === 'bulan_lalu') {
+            $rekapFrom = now()->subMonth()->startOfMonth()->toDateString();
+            $rekapTo = now()->subMonth()->endOfMonth()->toDateString();
+        } elseif ($rekapPeriode === 'custom' || ($request->filled('from') && $request->filled('to'))) {
+            $rekapFrom = $request->from;
+            $rekapTo = $request->to;
+            $rekapPeriode = 'custom';
+        } elseif ($rekapPeriode === 'semua') {
+            $rekapFrom = null;
+            $rekapTo = null;
+        }
+
+        // Query dasar Rekapitulasi Pembelian per Produk (tidak berkurang oleh penjualan)
+        $baseRekapQuery = DB::table('purchase_items')
+            ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
+            ->leftJoin('products', 'products.id', '=', 'purchase_items.product_id')
+            ->leftJoin('suppliers', 'suppliers.id', '=', 'purchases.supplier_id');
+
+        if ($rekapFrom && $rekapTo) {
+            $baseRekapQuery->whereDate('purchases.purchase_date', '>=', $rekapFrom)
+                           ->whereDate('purchases.purchase_date', '<=', $rekapTo);
+        } elseif ($rekapFrom) {
+            $baseRekapQuery->whereDate('purchases.purchase_date', '>=', $rekapFrom);
+        } elseif ($rekapTo) {
+            $baseRekapQuery->whereDate('purchases.purchase_date', '<=', $rekapTo);
+        }
+
+        if ($request->filled('supplier_id')) {
+            $baseRekapQuery->where('purchases.supplier_id', $request->supplier_id);
+        }
+
+        if ($request->filled('q')) {
+            $qRekap = $request->q;
+            $baseRekapQuery->where(function ($w) use ($qRekap) {
+                $w->where('purchase_items.product_name', 'like', "%{$qRekap}%")
+                  ->orWhere('products.name', 'like', "%{$qRekap}%")
+                  ->orWhere('products.barcode', 'like', "%{$qRekap}%")
+                  ->orWhere('products.sku', 'like', "%{$qRekap}%");
+            });
+        }
+
+        // Ringkasan akumulasi seluruh produk yang dibeli
+        $summaryQuery = clone $baseRekapQuery;
+        $rekapRingkasan = (object) [
+            'total_nominal' => (float) ($summaryQuery->sum('purchase_items.subtotal') ?? 0),
+            'total_base_qty' => (float) ($summaryQuery->sum(DB::raw('purchase_items.qty * COALESCE(purchase_items.unit_conversion, 1)')) ?? 0),
+            'total_produk' => (int) ($summaryQuery->distinct('purchase_items.product_id')->count('purchase_items.product_id')),
+            'total_faktur' => (int) ($summaryQuery->distinct('purchases.id')->count('purchases.id')),
+        ];
+
+        // Paginated items terindeks per produk
+        $rekapQuery = clone $baseRekapQuery;
+        $rekapProduk = $rekapQuery
+            ->select(
+                'purchase_items.product_id',
+                DB::raw('COALESCE(products.name, purchase_items.product_name) as nama_produk'),
+                DB::raw('COALESCE(products.barcode, "") as barcode'),
+                DB::raw('COALESCE(products.sku, "") as sku'),
+                DB::raw('COALESCE(products.unit, purchase_items.unit_label) as satuan_dasar'),
+                DB::raw('COALESCE(products.stock, 0) as sisa_stok_toko'),
+                DB::raw('SUM(purchase_items.qty * COALESCE(purchase_items.unit_conversion, 1)) as total_base_qty'),
+                DB::raw('SUM(purchase_items.subtotal) as total_nominal'),
+                DB::raw('COUNT(DISTINCT purchase_items.purchase_id) as jumlah_faktur'),
+                DB::raw('MAX(purchases.purchase_date) as tgl_faktur_terakhir')
+            )
+            ->groupBy('purchase_items.product_id', 'nama_produk', 'barcode', 'sku', 'satuan_dasar', 'sisa_stok_toko')
+            ->orderByDesc('total_nominal')
+            ->paginate(20, ['*'], 'rekap_page')
+            ->withQueryString();
+
+        // Rincian satuan dan daftar faktur untuk item pada halaman aktif
+        $activeProductIds = collect($rekapProduk->items())->pluck('product_id')->filter()->unique();
+        $rincianSatuanMap = [];
+        $riwayatFakturMap = [];
+
+        if ($activeProductIds->isNotEmpty()) {
+            $detailItemsQuery = DB::table('purchase_items')
+                ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
+                ->leftJoin('suppliers', 'suppliers.id', '=', 'purchases.supplier_id')
+                ->whereIn('purchase_items.product_id', $activeProductIds);
+
+            if ($rekapFrom && $rekapTo) {
+                $detailItemsQuery->whereDate('purchases.purchase_date', '>=', $rekapFrom)
+                                 ->whereDate('purchases.purchase_date', '<=', $rekapTo);
+            } elseif ($rekapFrom) {
+                $detailItemsQuery->whereDate('purchases.purchase_date', '>=', $rekapFrom);
+            } elseif ($rekapTo) {
+                $detailItemsQuery->whereDate('purchases.purchase_date', '<=', $rekapTo);
+            }
+
+            if ($request->filled('supplier_id')) {
+                $detailItemsQuery->where('purchases.supplier_id', $request->supplier_id);
+            }
+
+            $rawDetails = $detailItemsQuery
+                ->select(
+                    'purchase_items.product_id',
+                    'purchase_items.unit_label',
+                    'purchase_items.unit_conversion',
+                    'purchases.id as purchase_id',
+                    'purchases.purchase_no',
+                    'purchases.supplier_invoice_no',
+                    'purchases.purchase_date',
+                    'suppliers.name as supplier_name',
+                    'purchase_items.qty',
+                    'purchase_items.price',
+                    'purchase_items.subtotal'
+                )
+                ->orderByDesc('purchases.purchase_date')
+                ->get();
+
+            foreach ($rawDetails->groupBy('product_id') as $pId => $items) {
+                $unitsGroup = [];
+                foreach ($items->groupBy('unit_label') as $uLabel => $uItems) {
+                    $unitsGroup[] = [
+                        'unit_label' => $uLabel,
+                        'total_qty' => (float) $uItems->sum('qty'),
+                        'conversion' => (float) ($uItems->first()->unit_conversion ?? 1),
+                        'total_subtotal' => (float) $uItems->sum('subtotal'),
+                    ];
+                }
+                $rincianSatuanMap[$pId] = $unitsGroup;
+
+                $riwayatFakturMap[$pId] = $items->map(fn ($it) => [
+                    'purchase_id' => $it->purchase_id,
+                    'purchase_no' => $it->purchase_no,
+                    'supplier_invoice_no' => $it->supplier_invoice_no,
+                    'purchase_date' => $it->purchase_date,
+                    'supplier_name' => $it->supplier_name ?: 'Umum / Tanpa Supplier',
+                    'qty' => (float) $it->qty,
+                    'unit_label' => $it->unit_label,
+                    'price' => (float) $it->price,
+                    'subtotal' => (float) $it->subtotal,
+                ])->values()->all();
+            }
+        }
 
         $suppliers = Supplier::orderBy('name')->get();
         $products = Product::with('units.unit')->where('is_active', true)->where('type', 'barang')
@@ -83,7 +234,19 @@ class PurchaseController extends Controller
                 ])->values()->all(),
             ])->values();
 
-        return view('transaksi.pembelian.index', compact('purchases', 'ringkasan', 'suppliers', 'products'));
+        return view('transaksi.pembelian.index', compact(
+            'purchases', 'ringkasan', 'suppliers', 'products',
+            'rekapProduk', 'rekapRingkasan', 'rincianSatuanMap', 'riwayatFakturMap',
+            'rekapPeriode', 'rekapFrom', 'rekapTo'
+        ));
+    }
+
+    /**
+     * Endpoint langsung untuk membuka tab Rekap Barang Dibeli.
+     */
+    public function rekapProduk(Request $request)
+    {
+        return redirect()->route('pembelian.index', array_merge(['tab' => 'rekap_produk'], $request->all()));
     }
 
     public function store(Request $request, ProductCatalog $catalog)

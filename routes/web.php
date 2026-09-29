@@ -130,6 +130,7 @@ Route::middleware('auth')->group(function () {
 
     Route::middleware('menu:pembelian')->prefix('pembelian')->name('pembelian.')->group(function () {
         Route::get('/', [PurchaseController::class, 'index'])->name('index');
+        Route::get('/rekap-produk', [PurchaseController::class, 'rekapProduk'])->name('rekap-produk');
         Route::post('/', [PurchaseController::class, 'store'])->name('store');
         Route::post('/{purchase}/bayar', [PurchaseController::class, 'bayar'])->name('bayar');
         Route::get('/{purchase}/cetak', [PurchaseController::class, 'cetak'])->name('cetak');
@@ -151,6 +152,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/stok', [ReportController::class, 'stok'])->name('stok');
         Route::get('/stok/{product}', [ReportController::class, 'stokMovements'])->name('stok.detail');
         Route::get('/mutasi-stok', [ReportController::class, 'mutasiStok'])->name('mutasi-stok');
+        Route::get('/rekap-pembelian', [PurchaseController::class, 'rekapProduk'])->name('rekap-pembelian');
         Route::get('/terlaris', [ReportController::class, 'terlaris'])->name('terlaris');
         Route::get('/shift', [ReportController::class, 'shift'])->name('shift');
 

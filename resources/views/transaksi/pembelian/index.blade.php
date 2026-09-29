@@ -848,6 +848,16 @@ function pembelianApp(initialProducts = []) {
             @endif
         </button>
 
+        <button type="button" @click="aktifTab = 'rekap_produk'"
+                :class="aktifTab === 'rekap_produk' ? 'border-brand-600 text-brand-700 font-bold bg-white shadow-2xs' : 'border-transparent text-slate-500 hover:text-slate-800 font-semibold hover:bg-slate-50'"
+                class="px-4 py-3 border-b-2 text-xs sm:text-sm inline-flex items-center gap-2 transition rounded-t-xl shrink-0">
+            <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            <span>Rekap Barang Dibeli</span>
+            @if(isset($rekapRingkasan) && $rekapRingkasan->total_produk > 0)
+                <span class="px-2 py-0.5 text-[11px] rounded-full bg-brand-100 text-brand-700 font-bold">{{ $rekapRingkasan->total_produk }}</span>
+            @endif
+        </button>
+
         <button type="button" @click="bukaInputBaru()"
                 :class="aktifTab === 'input' ? 'border-brand-600 text-brand-700 font-bold bg-white shadow-2xs' : 'border-transparent text-slate-600 hover:text-brand-600 font-bold hover:bg-brand-50/40'"
                 class="px-4 py-3 border-b-2 text-xs sm:text-sm inline-flex items-center gap-2 transition rounded-t-xl shrink-0">
@@ -1053,6 +1063,292 @@ function pembelianApp(initialProducts = []) {
                 </div>
             </div>
             <div class="mt-4">{{ $purchases->links() }}</div>
+        </div>
+    </div>
+
+    {{-- ======================================================== --}}
+    {{-- TAB REKAP: AKUMULASI BARANG DIBELI (KULAKAN BARANG MASUK) --}}
+    {{-- ======================================================== --}}
+    <div x-show="aktifTab === 'rekap_produk'" x-cloak class="space-y-5">
+        {{-- Filter Bar Khusus Rekap --}}
+        <div class="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs">
+            <form method="GET" action="{{ route('pembelian.index') }}" class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <input type="hidden" name="tab" value="rekap_produk">
+
+                <div class="flex flex-wrap items-center gap-2.5 flex-1">
+                    {{-- Pencarian Produk --}}
+                    <div class="flex items-stretch rounded-xl border border-slate-300 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100 bg-white overflow-hidden flex-1 min-w-[220px]">
+                        <span class="inline-flex items-center px-3 bg-slate-50 text-slate-400 border-r border-slate-200 shrink-0">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        </span>
+                        <input type="text" name="q" value="{{ request('q') }}" placeholder="Cari nama barang / barcode / SKU..." class="w-full px-3 py-2 text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none">
+                    </div>
+
+                    {{-- Filter Supplier --}}
+                    <select name="supplier_id" class="px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 bg-white text-slate-700 focus:border-brand-500 focus:outline-none shrink-0">
+                        <option value="">Semua Pemasok / Supplier</option>
+                        @foreach($suppliers as $s)
+                            <option value="{{ $s->id }}" {{ request('supplier_id') == $s->id ? 'selected' : '' }}>{{ $s->name }}</option>
+                        @endforeach
+                    </select>
+
+                    {{-- Filter Periode Cepat --}}
+                    <select name="periode"
+                            class="px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 bg-white text-slate-700 focus:border-brand-500 focus:outline-none shrink-0"
+                            onchange="const el = document.getElementById('rekap-custom-dates'); if(this.value === 'custom') { el.classList.remove('hidden'); } else { el.classList.add('hidden'); }">
+                        <option value="bulan_ini" {{ $rekapPeriode === 'bulan_ini' ? 'selected' : '' }}>Bulan Ini ({{ now()->translatedFormat('F Y') }})</option>
+                        <option value="bulan_lalu" {{ $rekapPeriode === 'bulan_lalu' ? 'selected' : '' }}>Bulan Lalu</option>
+                        <option value="7_hari" {{ $rekapPeriode === '7_hari' ? 'selected' : '' }}>7 Hari Terakhir</option>
+                        <option value="hari_ini" {{ $rekapPeriode === 'hari_ini' ? 'selected' : '' }}>Hari Ini</option>
+                        <option value="semua" {{ $rekapPeriode === 'semua' ? 'selected' : '' }}>Semua Periode</option>
+                        <option value="custom" {{ $rekapPeriode === 'custom' ? 'selected' : '' }}>Rentang Tanggal...</option>
+                    </select>
+
+                    {{-- Rentang Tanggal Custom --}}
+                    <div id="rekap-custom-dates" class="{{ $rekapPeriode === 'custom' ? '' : 'hidden' }} flex items-center gap-1.5 shrink-0">
+                        <input type="date" name="from" value="{{ $rekapFrom }}" class="px-2.5 py-1.5 text-xs rounded-xl border border-slate-300 bg-white text-slate-700 focus:outline-none">
+                        <span class="text-xs text-slate-400">s/d</span>
+                        <input type="date" name="to" value="{{ $rekapTo }}" class="px-2.5 py-1.5 text-xs rounded-xl border border-slate-300 bg-white text-slate-700 focus:outline-none">
+                    </div>
+
+                    {{-- Tombol Filter --}}
+                    <button type="submit" class="btn btn-primary text-xs sm:text-sm py-2 px-4 inline-flex items-center gap-1.5 shadow-sm">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+                        <span>Terapkan</span>
+                    </button>
+
+                    @if(request()->filled('q') || request()->filled('supplier_id') || request()->filled('from') || (request()->filled('periode') && request('periode') !== 'bulan_ini'))
+                        <a href="{{ route('pembelian.index', ['tab' => 'rekap_produk']) }}" class="btn btn-outline text-xs sm:text-sm py-2 px-3 text-slate-600 hover:text-slate-800">
+                            Reset
+                        </a>
+                    @endif
+                </div>
+
+                {{-- Aksi Cetak Ringkas --}}
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="window.print()" class="btn btn-outline text-xs sm:text-sm py-2 px-3.5 inline-flex items-center gap-1.5 bg-white text-slate-700 hover:bg-slate-50 border-slate-300">
+                        <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                        <span>Cetak Rekap</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        {{-- Ringkasan 4 Kartu Metrik --}}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Nilai Kulakan</span>
+                    <div class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                </div>
+                <div class="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
+                    Rp {{ number_format($rekapRingkasan->total_nominal ?? 0, 0, ',', '.') }}
+                </div>
+                <div class="text-2xs text-slate-500 mt-1">Total uang modal kulakan belanja supplier</div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Jenis Barang Dibeli</span>
+                    <div class="w-7 h-7 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                    </div>
+                </div>
+                <div class="text-xl sm:text-2xl font-black text-brand-700 tracking-tight">
+                    {{ $rekapRingkasan->total_produk ?? 0 }} <span class="text-xs font-bold text-slate-500">Produk</span>
+                </div>
+                <div class="text-2xs text-slate-500 mt-1">Variasi item barang yang masuk di periode ini</div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Kuantitas Masuk</span>
+                    <div class="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+                    </div>
+                </div>
+                <div class="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
+                    {{ number_format($rekapRingkasan->total_base_qty ?? 0, 0, ',', '.') }} <span class="text-xs font-bold text-slate-500">Satuan Dasar</span>
+                </div>
+                <div class="text-2xs text-slate-500 mt-1">Akumulasi fisik barang masuk (tidak berkurang)</div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Faktur Terkait</span>
+                    <div class="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    </div>
+                </div>
+                <div class="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
+                    {{ $rekapRingkasan->total_faktur ?? 0 }} <span class="text-xs font-bold text-slate-500">Faktur/Nota</span>
+                </div>
+                <div class="text-2xs text-slate-500 mt-1">Transaksi nota supplier pada periode terpilih</div>
+            </div>
+        </div>
+
+        {{-- Banner Penjelasan Khusus Petshop / Client --}}
+        <div class="bg-blue-50 border border-blue-200/80 rounded-2xl p-4 flex items-start gap-3 text-xs text-blue-900 leading-relaxed shadow-2xs">
+            <span class="text-xl shrink-0">📦</span>
+            <div>
+                <div class="font-bold text-sm text-blue-950 mb-0.5">Catatan Khusus Rekapitulasi Pembelian (Kulakan Barang Masuk)</div>
+                <p class="text-blue-800">
+                    Halaman ini merangkum seluruh barang yang Anda kulakan/beli dari faktur supplier dalam periode yang dipilih.
+                    Kuantitas di bawah ini adalah <strong>akumulasi murni barang masuk</strong> (tidak berkurang oleh transaksi penjualan di kasir),
+                    sehingga Anda dapat mengetahui dengan pasti berapa banyak stok pakan/barang yang sudah dibeli dan berapa modal yang dikeluarkan.
+                </p>
+            </div>
+        </div>
+
+        {{-- Tabel Data Rekapitulasi Produk --}}
+        <div class="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-2xs">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs sm:text-sm">
+                    <thead>
+                        <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-2xs uppercase tracking-wider">
+                            <th class="py-3 px-3 w-12 text-center">No</th>
+                            <th class="py-3 px-4">Nama Produk &amp; Kode</th>
+                            <th class="py-3 px-4 text-center">Total Qty Kulakan</th>
+                            <th class="py-3 px-4">Rincian Satuan Beli</th>
+                            <th class="py-3 px-4 text-right">Rata-rata Modal</th>
+                            <th class="py-3 px-4 text-right">Total Nilai Kulakan (Rp)</th>
+                            <th class="py-3 px-4 text-center">Riwayat Faktur</th>
+                            <th class="py-3 px-4 text-center">Stok Toko Saat Ini</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($rekapProduk as $index => $item)
+                        @php
+                            $satuanList = $rincianSatuanMap[$item->product_id] ?? [];
+                            $fakturList = $riwayatFakturMap[$item->product_id] ?? [];
+                            $avgPrice = $item->total_base_qty > 0 ? round($item->total_nominal / $item->total_base_qty, 2) : 0;
+                        @endphp
+                        <tr x-data="{ bukaFaktur: false }" class="hover:bg-slate-50/70 transition">
+                            <td class="py-3.5 px-3 text-center text-slate-400 text-xs">
+                                {{ $rekapProduk->firstItem() + $index }}
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <div class="font-bold text-slate-800 text-sm">{{ $item->nama_produk }}</div>
+                                <div class="flex items-center gap-2 text-2xs text-slate-500 mt-0.5">
+                                    @if($item->barcode)
+                                        <span class="font-mono bg-slate-100 px-1.5 py-0.2 rounded text-slate-600">{{ $item->barcode }}</span>
+                                    @endif
+                                    @if($item->sku)
+                                        <span class="text-slate-400">SKU: {{ $item->sku }}</span>
+                                    @endif
+                                    <span class="text-slate-400">Satuan dasar: {{ $item->satuan_dasar }}</span>
+                                </div>
+                            </td>
+                            <td class="py-3.5 px-4 text-center">
+                                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-brand-50 text-brand-700 font-extrabold text-sm border border-brand-200/60">
+                                    {{ number_format($item->total_base_qty, 0, ',', '.') }} {{ $item->satuan_dasar }}
+                                </span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                @if(count($satuanList) > 0)
+                                    <div class="flex flex-wrap gap-1.5">
+                                        @foreach($satuanList as $sat)
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold">
+                                                <span>{{ number_format($sat['total_qty'], 0, ',', '.') }}</span>
+                                                <span class="text-slate-500 font-normal">{{ $sat['unit_label'] }}</span>
+                                                @if($sat['conversion'] > 1)
+                                                    <span class="text-2xs text-slate-400">(@ {{ $sat['conversion'] }} {{ $item->satuan_dasar }})</span>
+                                                @endif
+                                            </span>
+                                        @endforeach
+                                    </div>
+                                @else
+                                    <span class="text-slate-400 text-xs">-</span>
+                                @endif
+                            </td>
+                            <td class="py-3.5 px-4 text-right font-medium text-slate-600 text-xs sm:text-sm">
+                                Rp {{ number_format($avgPrice, 0, ',', '.') }}
+                                <div class="text-2xs text-slate-400">/ {{ $item->satuan_dasar }}</div>
+                            </td>
+                            <td class="py-3.5 px-4 text-right">
+                                <div class="font-black text-slate-900 text-sm sm:text-base">
+                                    Rp {{ number_format($item->total_nominal, 0, ',', '.') }}
+                                </div>
+                            </td>
+                            <td class="py-3.5 px-4 text-center">
+                                @if(count($fakturList) > 0)
+                                    <button type="button"
+                                            @click="bukaFaktur = !bukaFaktur"
+                                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition border border-slate-200 hover:border-brand-500 hover:text-brand-600 bg-white cursor-pointer">
+                                        <span>{{ count($fakturList) }} Nota</span>
+                                        <svg class="w-3.5 h-3.5 transition-transform" :class="bukaFaktur ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                    </button>
+                                @else
+                                    <span class="text-slate-400 text-xs">-</span>
+                                @endif
+                            </td>
+                            <td class="py-3.5 px-4 text-center">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold {{ $item->sisa_stok_toko > 0 ? 'bg-slate-100 text-slate-700' : 'bg-red-100 text-red-700' }}">
+                                    {{ number_format($item->sisa_stok_toko, 0, ',', '.') }} {{ $item->satuan_dasar }}
+                                </span>
+                            </td>
+                        </tr>
+
+                        {{-- Accordion Rincian Faktur Supplier --}}
+                        @if(count($fakturList) > 0)
+                        <tr x-show="bukaFaktur" x-cloak class="bg-brand-50/20 border-b border-slate-200">
+                            <td colspan="8" class="py-3 px-6">
+                                <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs space-y-2">
+                                    <div class="text-xs font-bold text-slate-700 flex items-center justify-between">
+                                        <span>Rincian Faktur Pembelian: {{ $item->nama_produk }}</span>
+                                        <span class="text-2xs text-slate-500">Terakhir dibeli: {{ $item->tgl_faktur_terakhir ? \Carbon\Carbon::parse($item->tgl_faktur_terakhir)->translatedFormat('d F Y') : '-' }}</span>
+                                    </div>
+                                    <div class="overflow-x-auto">
+                                        <table class="w-full text-xs text-left">
+                                            <thead>
+                                                <tr class="text-2xs uppercase text-slate-400 border-b border-slate-100">
+                                                    <th class="py-1.5 px-2">Tanggal</th>
+                                                    <th class="py-1.5 px-2">No. Pembelian</th>
+                                                    <th class="py-1.5 px-2">No. Faktur Supplier</th>
+                                                    <th class="py-1.5 px-2">Pemasok</th>
+                                                    <th class="py-1.5 px-2 text-right">Qty Beli</th>
+                                                    <th class="py-1.5 px-2 text-right">Harga Beli</th>
+                                                    <th class="py-1.5 px-2 text-right">Subtotal</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-100">
+                                                @foreach($fakturList as $fak)
+                                                <tr class="hover:bg-slate-50">
+                                                    <td class="py-1.5 px-2 text-slate-600">{{ \Carbon\Carbon::parse($fak['purchase_date'])->format('d/m/Y') }}</td>
+                                                    <td class="py-1.5 px-2 font-mono font-bold text-brand-600">{{ $fak['purchase_no'] }}</td>
+                                                    <td class="py-1.5 px-2 font-mono text-slate-700">{{ $fak['supplier_invoice_no'] ?: '-' }}</td>
+                                                    <td class="py-1.5 px-2 text-slate-700">{{ $fak['supplier_name'] }}</td>
+                                                    <td class="py-1.5 px-2 text-right font-bold text-slate-800">{{ number_format($fak['qty'], 0, ',', '.') }} {{ $fak['unit_label'] }}</td>
+                                                    <td class="py-1.5 px-2 text-right text-slate-600">Rp {{ number_format($fak['price'], 0, ',', '.') }}</td>
+                                                    <td class="py-1.5 px-2 text-right font-bold text-slate-900">Rp {{ number_format($fak['subtotal'], 0, ',', '.') }}</td>
+                                                </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        @endif
+                        @empty
+                        <tr>
+                            <td colspan="8" class="py-12 px-4 text-center">
+                                <div class="max-w-sm mx-auto space-y-2">
+                                    <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto text-xl">📦</div>
+                                    <p class="text-sm font-semibold text-slate-600">Belum ada barang dibeli pada periode ini</p>
+                                    <p class="text-xs text-slate-400">Silakan ubah rentang tanggal/filter supplier, atau klik tab "+ Catat Pembelian Baru" untuk menginput faktur pembelian.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-4 border-t border-slate-200">
+                {{ $rekapProduk->links() }}
+            </div>
         </div>
     </div>
 
