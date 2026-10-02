@@ -167,5 +167,8 @@ class SesiAplikasiTest extends JposTestCase
         $this->assertStringContainsString("route('kasir.waiting-list.update', \$sale, false)", $waitingBlade);
         $this->assertStringContainsString("route('retur.store', [], false)", $returBlade);
         $this->assertStringContainsString("route('retur.find', [], false)", $returBlade);
+
+        $kasirController = file_get_contents(app_path('Http/Controllers/KasirController.php'));
+        $this->assertStringContainsString("route('kasir.receipt', \$sale->id, false)", $kasirController);
     }
 }

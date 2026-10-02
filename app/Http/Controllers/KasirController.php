@@ -427,7 +427,7 @@ class KasirController extends Controller
             return $sale;
         });
 
-        return response()->json(['success' => true, 'sale_id' => $sale->id, 'receipt_url' => route('kasir.receipt', $sale->id)]);
+        return response()->json(['success' => true, 'sale_id' => $sale->id, 'receipt_url' => route('kasir.receipt', $sale->id, false)]);
     }
 
     /**
