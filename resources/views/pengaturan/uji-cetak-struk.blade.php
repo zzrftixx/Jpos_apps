@@ -71,9 +71,8 @@
     <div class="no-print">
         <button onclick="window.print()" style="padding:8px 16px;">Cetak Lembar Uji</button>
         <p style="font-size:12px; color:#555; max-width:520px; margin:10px auto;">
-            Saat dialog cetak muncul, pastikan <strong>Skala = 100% / Default</strong>
-            (jangan "Fit to page") dan matikan "Headers and footers". Kalau skalanya bukan
-            100%, hasil cetaknya pasti mengecil berapa pun angka yang diisi di pengaturan.
+            Saat dialog cetak muncul, pastikan: 1. <strong>Margins = None (Tanpa Margin)</strong>, 2. <strong>Skala = 100% / Default</strong>
+            (jangan "Fit to page"), dan 3. matikan "Headers and footers". Ini menjamin struk pas dari tepi kiri sampai tepi kanan tanpa terpotong.
         </p>
     </div>
 </body>

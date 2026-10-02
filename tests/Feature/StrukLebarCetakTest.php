@@ -42,6 +42,20 @@ class StrukLebarCetakTest extends JposTestCase
     }
 
     /**
+     * Data warisan / konfigurasi tanpa kunci 'profile' tetap harus dipetakan ke lebar cetak.
+     * Jika tidak dipetakan, paper_size 58 akan mengembalikan 58mm (meluap 10mm dari print head fisik 48mm).
+     */
+    public function test_fallback_paper_size_tanpa_profile_tetap_dipetakan_ke_lebar_cetak(): void
+    {
+        $this->assertSame(48.0, Struk::lebarCetak(['paper_size' => 58]),
+            'paper_size 58 tanpa profile harus dipetakan ke 48.0mm');
+        $this->assertSame(72.0, Struk::lebarCetak(['paper_size' => 80]),
+            'paper_size 80 tanpa profile harus dipetakan ke 72.0mm');
+        $this->assertSame(48.0, Struk::lebarCetak(['paper_size' => '58']));
+        $this->assertSame(72.0, Struk::lebarCetak(['paper_size' => '80']));
+    }
+
+    /**
      * Toko yang sudah menyetel angkanya sendiri sampai hasilnya pas TIDAK boleh diubah.
      *
      * Angka custom itu sudah lebar cetak - hasil coba-coba di printer sungguhan. Menguranginya
@@ -254,5 +268,24 @@ class StrukLebarCetakTest extends JposTestCase
         // 48mm x 2.75 = 132px. Lebar kertas 58mm akan menghasilkan 159.5px.
         $this->assertStringContainsString('width:132px', str_replace(' ', '', $isi),
             'Pratinjau masih digambar selebar kertas, bukan selebar cetak.');
+    }
+
+    /**
+     * Tabel pada struk termal harus memiliki table-layout: fixed, overflow-wrap: break-word,
+     * dan pembagian kolom yang pasti agar nominal di kolom kanan tidak pernah terdorong keluar area cetak.
+     */
+    public function test_tabel_struk_termal_memakai_layout_fixed_dan_word_wrap(): void
+    {
+        Setting::set('printer_struk', ['profile' => 'pos58', 'paper_size' => 58, 'margin' => 0]);
+        Setting::set('template_struk', ['layout' => 'simple']);
+
+        $isi = $this->actingAs($this->admin)
+            ->get(route('kasir.receipt', $this->buatTransaksi()))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('table-layout: fixed;', $isi);
+        $this->assertStringContainsString('overflow-x: hidden;', $isi);
+        $this->assertStringContainsString('table { width: 100%; border-collapse: collapse; table-layout: fixed;', $isi);
     }
 }

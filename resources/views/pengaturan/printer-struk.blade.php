@@ -36,6 +36,9 @@
         <div>
             <label class="form-label">Margin Cetak (mm)</label>
             <input type="text" data-jpos-number data-number-decimals="1" data-number-group="0" name="margin" value="{{ $settings['margin'] ?? 0 }}" class="form-input">
+            <p class="text-xs text-slate-500 mt-1">
+                Disarankan <strong>0 mm</strong> untuk printer 58mm (POS58) agar lebar cetak tidak menyempit. Margin 5mm akan memangkas ruang isi menjadi 38mm sehingga teks/angka mudah meluap.
+            </p>
         </div>
         <div>
             <label class="form-label">Ukuran Font (px)</label>
@@ -68,8 +71,12 @@
         atau ganti templatenya di menu <a href="{{ route('pengaturan.template-struk') }}" class="underline">Template Struk</a>.
     </div>
     @endif
-    <div class="mt-4 text-xs text-slate-500 bg-slate-50 border rounded-lg p-3">
-        <strong>Hasil cetak blur/buram?</strong> Biasanya karena dialog print browser men-scale halaman. Saat dialog cetak muncul: set <strong>Scale = 100% / Default</strong> (jangan "Fit to page"), dan matikan "Headers and footers". Logo toko sebaiknya gambar hitam-putih kontras tinggi (bukan foto berwarna) karena printer thermal tidak bisa cetak abu-abu/gradasi.
+    <div class="mt-4 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1">
+        <p class="font-bold text-slate-700">Panduan Dialog Cetak Browser (Chrome / Edge):</p>
+        <p>&bull; <strong>Margins (Margin)</strong>: Pilih <strong>"None" (Tanpa Margin)</strong> agar tepi kertas tidak terpotong oleh margin browser bawaan.</p>
+        <p>&bull; <strong>Scale (Skala)</strong>: Pilih <strong>100% / Default</strong> (jangan "Fit to page" agar cetakan tidak mengecil atau blur).</p>
+        <p>&bull; <strong>Headers and footers</strong>: <strong>Matikan (Uncheck)</strong> agar tanggal dan URL browser tidak ikut tercetak.</p>
+        <p class="pt-1 text-slate-500">&bull; Logo toko sebaiknya gambar hitam-putih kontras tinggi (bukan foto berwarna) karena printer thermal tidak bisa mencetak gradasi abu-abu.</p>
     </div>
 </div>
 @endsection

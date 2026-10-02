@@ -89,9 +89,18 @@ class Struk
             return self::LEBAR_CETAK[$profil];
         }
 
-        // Tanpa profil yang dikenal, angka yang ada dipakai apa adanya - menebak-nebak di
-        // sini justru bisa mengubah hasil cetak toko yang selama ini sudah pas.
-        return (float) ($printerStruk['paper_size'] ?? 80);
+        // Penjagaan data warisan / default: bila profil tidak disetel, paper_size 58 atau 80
+        // tetap dipetakan ke lebar cetak kepala printer (48mm / 72mm).
+        // Tanpa ini, instalasi lama tanpa 'profile' mencetak 58mm/80mm yang meluap dari kepala cetak.
+        $paperSize = (int) ($printerStruk['paper_size'] ?? 80);
+        if ($paperSize === 58) {
+            return self::LEBAR_CETAK['pos58'];
+        }
+        if ($paperSize === 80) {
+            return self::LEBAR_CETAK['pos80'];
+        }
+
+        return (float) $paperSize;
     }
 
     /** Berapa karakter monospace yang muat dalam satu baris selebar $lebarMm. */

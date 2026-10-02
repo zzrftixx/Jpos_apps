@@ -61,8 +61,12 @@
              isinya justru meluap ke luar area cetak - persis kebalikan dari yang diinginkan
              orang yang menaikkan angka margin untuk merapikan hasilnya. --}}
         @page { size: {{ $lebarCetak }}mm auto; margin: 0; }
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
         body {
             width: {{ $lebarCetak }}mm;
+            max-width: {{ $lebarCetak }}mm;
             margin: 0 auto;
             font-family: 'Courier New', monospace;
             font-size: {{ $layout === 'tabel' ? 12 : ($printerStruk['font_size'] ?? 12) }}px;
@@ -70,16 +74,18 @@
             color: #000;
             padding: {{ $layout === 'tabel' ? '4px' : '6px' }} {{ max(0, (float) ($printerStruk['margin'] ?? 0)) }}mm;
             box-sizing: border-box;
-            max-width: {{ $lebarCetak }}mm;
+            overflow-x: hidden;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
         .center { text-align: center; }
         .right { text-align: right; }
         hr { border: none; border-top: 1px dashed #000; margin: {{ $layout === 'tabel' ? '4px 0' : '6px 0' }}; }
-        table { width: 100%; border-collapse: collapse; }
-        td { padding: 1px 0; vertical-align: top; }
-        .item-name { width: 100%; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; box-sizing: border-box; }
+        td, th { padding: 1px 0; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; box-sizing: border-box; }
+        .item-name { width: 100%; word-wrap: break-word; overflow-wrap: break-word; line-height: 1.25; }
         {{-- Font tabel menyesuaikan lebar cetak: pada kertas sempit, nominal yang membungkus
              ke baris berikutnya membuat struk salah dibaca - dan itu jauh lebih mahal
              daripada huruf yang sedikit lebih kecil. Batas bawahnya 9px; lihat Struk. --}}
@@ -245,6 +251,10 @@
     @else
         <hr>
         <table>
+            <colgroup>
+                <col style="width: 35%;">
+                <col style="width: 65%;">
+            </colgroup>
             <tr><td>No</td><td class="right">{{ $sale->invoice_no }}</td></tr>
             <tr><td>Tanggal</td><td class="right">{{ $sale->created_at->format('d/m/Y H:i') }}</td></tr>
             @if($templateStruk['show_cashier'] ?? true)
@@ -315,6 +325,10 @@
     @elseif($layout === 'normal')
         @foreach($sale->items as $item)
             <table>
+                <colgroup>
+                    <col style="width: 62%;">
+                    <col style="width: 38%;">
+                </colgroup>
                 <tr>
                     <td>{{ $item->product_name }}{{ $item->unit_label ? ' ('.$item->unit_label.')' : '' }}</td>
                     <td class="right">{{ number_format($item->subtotal, 0, ',', '.') }}</td>
@@ -327,6 +341,10 @@
         @foreach($sale->items as $item)
             <div class="item-name">{{ $item->product_name }}{{ $item->unit_label ? ' ('.$item->unit_label.')' : '' }}</div>
             <table style="border-bottom: 1px solid #000; margin-bottom: 3px; padding-bottom: 2px;">
+                <colgroup>
+                    <col style="width: 62%;">
+                    <col style="width: 38%;">
+                </colgroup>
                 <tr>
                     <td>@qty($item->qty){{ $item->unit_label ? ' '.$item->unit_label : '' }} x {{ number_format($item->price, 0, ',', '.') }}</td>
                     <td class="right">{{ number_format($item->subtotal, 0, ',', '.') }}</td>
@@ -338,6 +356,10 @@
 
     @php $isNota = $layout === 'tabel'; @endphp
     <table>
+        <colgroup>
+            <col style="width: 55%;">
+            <col style="width: 45%;">
+        </colgroup>
         @unless($isNota)
         <tr><td>Subtotal</td><td class="right">{{ number_format($sale->subtotal, 0, ',', '.') }}</td></tr>
         @endunless
