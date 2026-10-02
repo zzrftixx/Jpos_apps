@@ -34,7 +34,7 @@ namespace JPOSLauncher
         // Halaman kasir mengirim "detak" tiap 10 detik selama terbuka, dan "sinyal tutup"
         // saat ditinggalkan. Detak berikutnya menghapus sinyal tutup.
 
-        private const int JedaPengawasMs = 2000;
+        private const int JedaPengawasMs = 500;
 
         // Berpindah halaman memicu sinyal tutup yang sama persis dengan menutup jendela.
         // Tunggu selama ini sebelum percaya: kalau halaman berikutnya keburu memuat, detaknya
@@ -128,10 +128,17 @@ namespace JPOSLauncher
         {
             bool terkirim = MintaJendelaDibuka();
 
+            if (terkirim)
+            {
+                // Sinyal buka jendela sudah terkirim ke instance utama yang berjalan di latar belakang/tray.
+                // Instance ini langsung selesai tanpa menunggu mutex timeout agar respons instan (<0.5 detik).
+                return false;
+            }
+
             bool giliranKita;
             try
             {
-                giliranKita = singleInstance.WaitOne(terkirim ? 3000 : 20000);
+                giliranKita = singleInstance.WaitOne(20000);
             }
             catch (AbandonedMutexException)
             {
@@ -150,12 +157,9 @@ namespace JPOSLauncher
                 return true;
             }
 
-            if (!terkirim)
-            {
-                MessageBox.Show(
-                    "JPOS sudah berjalan.\n\nCari ikon JPOS di pojok kanan bawah layar (system tray), lalu klik dua kali untuk membuka aplikasi kasir.",
-                    "JPOS Sudah Berjalan", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
+            MessageBox.Show(
+                "JPOS sudah berjalan.\n\nCari ikon JPOS di pojok kanan bawah layar (system tray), lalu klik dua kali untuk membuka aplikasi kasir.",
+                "JPOS Sudah Berjalan", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
             return false;
         }
@@ -740,6 +744,60 @@ namespace JPOSLauncher
             }
         }
 
+        private const string StartupRegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        private const string AppRegistryName = "JPOS_Kasir";
+
+        private static bool IsStartupEnabled()
+        {
+            try
+            {
+                using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(StartupRegistryKey, false))
+                {
+                    if (key != null)
+                    {
+                        object val = key.GetValue(AppRegistryName);
+                        return val != null;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private static void ToggleStartup(MenuItem item)
+        {
+            try
+            {
+                using (Microsoft.Win32.RegistryKey key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(StartupRegistryKey, true))
+                {
+                    if (key != null)
+                    {
+                        bool currentlyEnabled = IsStartupEnabled();
+                        if (currentlyEnabled)
+                        {
+                            key.DeleteValue(AppRegistryName, false);
+                            if (item != null) item.Checked = false;
+                            Log("Auto-start saat Windows boot dinonaktifkan.");
+                            MessageBox.Show("Auto-start saat Windows boot telah dinonaktifkan.", "JPOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                        else
+                        {
+                            string exePath = Application.ExecutablePath;
+                            key.SetValue(AppRegistryName, "\"" + exePath + "\"");
+                            if (item != null) item.Checked = true;
+                            Log("Auto-start saat Windows boot diaktifkan: " + exePath);
+                            MessageBox.Show("JPOS akan otomatis berjalan di latar belakang (System Tray) saat komputer dinyalakan.", "JPOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("Gagal mengubah auto-start Windows: " + ex.Message);
+                MessageBox.Show("Gagal mengatur auto-start: " + ex.Message, "JPOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
         private static void SetupSystemTray()
         {
             ContextMenu menu = new ContextMenu();
@@ -770,6 +828,11 @@ namespace JPOSLauncher
             }
 
             MenuItem itemFirewall = new MenuItem("Buka Izin Firewall LAN", delegate { BukaFirewallLan(); });
+            MenuItem itemStartup = new MenuItem("Jalankan Otomatis Saat Windows Boot", delegate(object sender, EventArgs e) {
+                ToggleStartup((MenuItem)sender);
+            });
+            itemStartup.Checked = IsStartupEnabled();
+
             MenuItem itemKeluar = new MenuItem("Keluar & Matikan Server", delegate { ExitApp(); });
 
             menu.MenuItems.Add(itemJudul);
@@ -780,6 +843,7 @@ namespace JPOSLauncher
                 menu.MenuItems.Add(itemLan);
             }
             menu.MenuItems.Add(itemFirewall);
+            menu.MenuItems.Add(itemStartup);
             menu.MenuItems.Add(itemFolder);
             menu.MenuItems.Add(itemLog);
             menu.MenuItems.Add("-");
@@ -946,30 +1010,11 @@ namespace JPOSLauncher
                     return;
                 }
 
-                DateTime detak = WaktuPenanda("jpos-detak");
-                DateTime tutup = WaktuPenanda("jpos-tutup");
-
-                // Belum ada detak sama sekali: browser masih dalam perjalanan membuka
-                // halaman pertama. Jangan matikan apa pun - kasir juga masih punya ikon
-                // tray untuk membukanya sendiri.
-                if (detak == DateTime.MinValue) return;
-
-                DateTime sekarang = DateTime.UtcNow;
-
-                // Sinyal tutup yang tidak dibatalkan detak apa pun selama sekian detik:
-                // jendelanya benar-benar ditutup, bukan sekadar pindah halaman.
-                if (tutup != DateTime.MinValue && (sekarang - tutup).TotalSeconds >= KonfirmasiTutupDetik)
-                {
-                    Log("Jendela aplikasi ditutup. Server dimatikan.");
-                    ExitApp();
-                    return;
-                }
-
-                if ((sekarang - detak).TotalSeconds >= DetakHilangDetik)
-                {
-                    Log("Tidak ada tanda jendela aplikasi terbuka selama " + DetakHilangDetik + " detik. Server dimatikan.");
-                    ExitApp();
-                }
+                // POS-Grade Standby: Server PHP dan Tray Icon sengaja TIDAK dimatikan otomatis
+                // ketika browser ditutup atau tab kasir di-freeze/discard oleh sistem operasi/browser,
+                // agar server kasir utama dan akses multi-device LAN selalu standby siap pakai.
+                // Penutupan server HANYA dilakukan saat kasir secara eksplisit memilih
+                // "Keluar & Matikan Server" dari context menu System Tray, atau saat sistem Windows shutdown.
             }
             catch (Exception ex)
             {

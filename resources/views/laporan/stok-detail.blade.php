@@ -31,7 +31,7 @@
                 <td>{{ $m->created_at->format('d/m/Y H:i') }}</td>
                 <td class="capitalize">{{ $m->type }}</td>
                 <td class="{{ $m->qty < 0 ? 'text-red-600' : 'text-green-600' }}">{{ $m->qty > 0 ? '+' : '' }}@qty($m->qty)</td>
-                <td>{{ number_format($m->stock_after, 0, ',', '.') }}</td>
+                <td>@qty($m->stock_after)</td>
                 <td class="text-slate-500">{{ $m->note ?: '-' }}</td>
                 <td>{{ $m->user->name ?? '-' }}</td>
             </tr>

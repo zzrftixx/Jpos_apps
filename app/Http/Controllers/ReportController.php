@@ -257,7 +257,8 @@ class ReportController extends Controller
             ->select(
                 'products.*',
                 DB::raw('COALESCE(beli.total_beli, 0) as total_masuk'),
-                DB::raw('COALESCE(jual.total_jual, 0) as total_keluar')
+                DB::raw('COALESCE(jual.total_jual, 0) as total_keluar'),
+                DB::raw('MAX(0, (COALESCE(products.stock, 0) - COALESCE(beli.total_beli, 0) + COALESCE(jual.total_jual, 0))) as stok_awal')
             );
 
         if ($request->filled('q')) {

@@ -2615,7 +2615,7 @@ function kasirApp() {
 
                 window.location.reload();
             } catch (e) {
-                this.errorMsg = 'Gagal menghubungi server.';
+                this.errorMsg = 'Gagal menghubungi server. Pastikan aplikasi JPOS.exe di komputer ini menyala.';
             }
             this.processing = false;
         },

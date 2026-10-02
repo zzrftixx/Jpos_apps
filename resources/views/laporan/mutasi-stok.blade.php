@@ -55,6 +55,7 @@
     <div>
         <span class="font-bold">Panduan Pemantauan Stok:</span>
         <span class="text-blue-800">
+            Kolom <strong>Stok Awal</strong> memperkirakan posisi stok sebelum pergerakan pada periode terpilih (Stok Akhir - Masuk + Keluar).
             Kolom <strong>Masuk (Kulakan)</strong> merangkum seluruh pembelian barang dari distributor dalam periode terpilih.
             Kolom <strong>Keluar (Terjual Kasir)</strong> merangkum total produk yang selesai dibayar kasir dalam periode terpilih.
             Kolom <strong>Sisa Stok Sekarang</strong> adalah jumlah fisik barang riil yang saat ini siap dijual di toko.
@@ -70,6 +71,7 @@
                 <th>Produk</th>
                 <th>Kategori</th>
                 <th>Satuan</th>
+                <th class="text-right">Stok Awal</th>
                 <th class="text-right">Masuk (Kulakan)</th>
                 <th class="text-right">Keluar (Terjual Kasir)</th>
                 <th class="text-right">Sisa Stok Sekarang</th>
@@ -94,6 +96,7 @@
                     @endif
                 </td>
                 <td class="text-xs text-slate-600 font-medium">{{ $p->unit ?? 'Pcs' }}</td>
+                <td class="text-right font-mono font-medium text-slate-700">@qty($p->stok_awal)</td>
                 <td class="text-right font-mono font-bold text-emerald-700">
                     @if($p->total_masuk > 0)
                         +@qty($p->total_masuk)
@@ -119,7 +122,7 @@
             </tr>
             @empty
             <tr>
-                <td colspan="8" class="text-center text-slate-400 py-8">
+                <td colspan="9" class="text-center text-slate-400 py-8">
                     Tidak ada data produk yang cocok dengan penyaring yang dipilih.
                 </td>
             </tr>

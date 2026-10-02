@@ -70,6 +70,7 @@ echo sprintf("  - Cache Acceleration Ratio  : %8.1fx LEBIH CEPAT\n\n", $speedup)
 // Sesi Benchmark 2: Kasir Checkout Engine Throughput
 echo "[BENCHMARK 2] Transaksi Checkout Engine (DB::transaction + lockForUpdate + StockMovement)\n";
 $user = User::first() ?? User::create(['name' => 'Kasir Uji', 'username' => 'kasir_uji', 'password' => bcrypt('password'), 'role' => 'kasir']);
+$createdDummyProduct = false;
 $product = Product::where('type', 'barang')->where('stock', '>', 500)->first();
 
 if (!$product) {
@@ -83,6 +84,7 @@ if (!$product) {
         'unit' => 'Pcs',
         'is_active' => true,
     ]);
+    $createdDummyProduct = true;
 }
 
 $trxCount = 100;
@@ -144,6 +146,23 @@ echo sprintf("  - Total Transaksi Dieksekusi : %d transaksi penuh (H1, H2, H3, H
 echo sprintf("  - Waktu Total                : %8.2f ms\n", $durasiTrxTotal);
 echo sprintf("  - Throughput (TPS)           : %8.1f transaksi / detik\n", $trxPerSec);
 echo sprintf("  - Rata-rata Latensi per Trx  : %8.2f ms / transaksi\n\n", $avgLatency);
+
+// Bersihkan data dummy benchmark agar database tetap steril
+DB::transaction(function () use ($product, $trxCount, $createdDummyProduct) {
+    $ids = Sale::where('invoice_no', 'like', 'INV-BENCH-%')->pluck('id');
+    SaleItem::whereIn('sale_id', $ids)->delete();
+    SalePayment::whereIn('sale_id', $ids)->delete();
+    StockMovement::where('note', 'like', 'Penjualan INV-BENCH-%')->delete();
+    Sale::whereIn('id', $ids)->delete();
+    if ($createdDummyProduct || $product->sku === 'BNCH001') {
+        Product::where('sku', 'BNCH001')->delete();
+    } else {
+        $p = Product::find($product->id);
+        if ($p) {
+            $p->ubahStok($trxCount);
+        }
+    }
+});
 
 
 // Sesi Benchmark 3: Akuntansi Engine Keseimbangan Finansial

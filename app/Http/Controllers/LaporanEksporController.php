@@ -474,7 +474,8 @@ class LaporanEksporController extends Controller
             ->select(
                 'products.*',
                 DB::raw('COALESCE(beli.total_beli, 0) as total_masuk'),
-                DB::raw('COALESCE(jual.total_jual, 0) as total_keluar')
+                DB::raw('COALESCE(jual.total_jual, 0) as total_keluar'),
+                DB::raw('MAX(0, (COALESCE(products.stock, 0) - COALESCE(beli.total_beli, 0) + COALESCE(jual.total_jual, 0))) as stok_awal')
             );
 
         if ($q !== '') {
@@ -502,6 +503,7 @@ class LaporanEksporController extends Controller
             'barcode' => $p->barcode ?: '-',
             'kategori' => $p->category->name ?? '-',
             'satuan' => $p->unit ?: 'Pcs',
+            'stok_awal' => (float) $p->stok_awal,
             'masuk' => (float) $p->total_masuk,
             'keluar' => (float) $p->total_keluar,
             'stok' => (float) $p->stock,
@@ -509,6 +511,7 @@ class LaporanEksporController extends Controller
 
         $ringkasan = [
             'Total Jenis Produk' => number_format($baris->count(), 0, ',', '.'),
+            'Total Stok Awal' => number_format($baris->sum('stok_awal'), 2, ',', '.'),
             'Total Qty Kulakan Masuk' => number_format($baris->sum('masuk'), 2, ',', '.'),
             'Total Qty Terjual Keluar' => number_format($baris->sum('keluar'), 2, ',', '.'),
             'Total Sisa Stok' => number_format($baris->sum('stok'), 2, ',', '.'),
@@ -518,20 +521,23 @@ class LaporanEksporController extends Controller
             ->periode($dari, $sampai)
             ->ringkasan($ringkasan)
             ->bagian('Rincian Mutasi Barang', [
-                ['label' => 'Nama Produk', 'key' => 'nama', 'lebar' => 32],
-                ['label' => 'Barcode', 'key' => 'barcode', 'lebar' => 16],
-                ['label' => 'Kategori', 'key' => 'kategori', 'lebar' => 16],
-                ['label' => 'Satuan', 'key' => 'satuan', 'lebar' => 10],
+                ['label' => 'Nama Produk', 'key' => 'nama', 'lebar' => 30],
+                ['label' => 'Barcode', 'key' => 'barcode', 'lebar' => 15],
+                ['label' => 'Kategori', 'key' => 'kategori', 'lebar' => 15],
+                ['label' => 'Satuan', 'key' => 'satuan', 'lebar' => 8],
+                ['label' => 'Stok Awal', 'key' => 'stok_awal', 'format' => 'angka'],
                 ['label' => 'Masuk (Beli)', 'key' => 'masuk', 'format' => 'angka'],
                 ['label' => 'Keluar (Jual)', 'key' => 'keluar', 'format' => 'angka'],
                 ['label' => 'Sisa Stok', 'key' => 'stok', 'format' => 'angka'],
             ], $baris->all(), [
                 'nama' => 'TOTAL',
+                'stok_awal' => $baris->sum('stok_awal'),
                 'masuk' => $baris->sum('masuk'),
                 'keluar' => $baris->sum('keluar'),
                 'stok' => $baris->sum('stok'),
             ])
             ->catatan(
+                'Stok Awal memperkirakan posisi stok sebelum pergerakan pada periode terpilih (Stok Akhir - Masuk + Keluar).',
                 'Barang Masuk dihitung dari seluruh nota pembelian distributor pada rentang tanggal terpilih.',
                 'Barang Keluar dihitung dari seluruh penjualan berstatus selesai dikurangi retur pada rentang tanggal terpilih.',
                 'Sisa Stok menunjukkan posisi fisik stok saat ini yang siap dijual di toko.',
