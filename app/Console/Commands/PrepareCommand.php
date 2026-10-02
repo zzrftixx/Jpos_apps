@@ -110,7 +110,25 @@ class PrepareCommand extends Command
                 ? 'Kunci keamanan aplikasi dibuat untuk instalasi ini.'
                 : 'Kunci keamanan bawaan diganti dengan kunci unik untuk instalasi ini.');
         } catch (\Throwable $e) {
-            $this->warn('Tidak bisa memperbarui kunci keamanan: ' . $e->getMessage());
+            $this->warn('Tidak bisa memperbarui kunci keamanan via artisan: ' . $e->getMessage());
+        }
+
+        // Jaring pengaman: jika artisan gagal menulis ke .env (mis. karena regex mismatch atau cached config),
+        // tulis langsung 32-byte key acak ke .env
+        $envPath = base_path('.env');
+        if (File::exists($envPath)) {
+            $isiEnv = File::get($envPath);
+            if (! preg_match('/^APP_KEY=base64:[A-Za-z0-9+\/]{43}=/m', $isiEnv)) {
+                $kunciBaru = 'base64:' . base64_encode(random_bytes(32));
+                if (preg_match('/^APP_KEY=.*/m', $isiEnv)) {
+                    $isiEnv = preg_replace('/^APP_KEY=.*/m', 'APP_KEY=' . $kunciBaru, $isiEnv);
+                } else {
+                    $isiEnv .= "\nAPP_KEY=" . $kunciBaru . "\n";
+                }
+                File::put($envPath, $isiEnv);
+                config(['app.key' => $kunciBaru]);
+                $this->line('Kunci keamanan aplikasi disematkan langsung ke .env.');
+            }
         }
     }
 
@@ -150,6 +168,12 @@ class PrepareCommand extends Command
     private function prepareDatabase(SqliteBackup $backup): void
     {
         $path = $backup->databasePath();
+
+        if ($path === ':memory:') {
+            $this->callSilently('migrate', ['--force' => true]);
+
+            return;
+        }
 
         if (! is_file($path)) {
             $this->line('Database belum ada, membuat instalasi baru di: ' . $path);

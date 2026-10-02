@@ -7,6 +7,8 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using System.Drawing;
+using System.Collections.Generic;
+using System.Security.Cryptography;
 
 namespace JPOSLauncher
 {
@@ -338,10 +340,32 @@ namespace JPOSLauncher
             if (File.Exists(envPath) && !PunyaAppKey(envPath))
             {
                 Log("APP_KEY belum ada, membuat kunci acak baru");
+
+                // JARING PENGAMAN 1:
+                // Hapus cache config lama terlebih dahulu! Jika bootstrap/cache/config.php masih ada
+                // (misal sisa dari sesi lama atau folder build), Laravel akan mem-boot config basi
+                // dan regex key:generate akan mencari key basi tersebut di dalam .env sehingga gagal total.
+                HapusCacheBootstrap();
+
+                // JARING PENGAMAN 2:
+                // Coba jalankan artisan key:generate --force
                 int kode;
                 JalankanArtisan("key:generate --force", 60, out kode);
 
+                // JARING PENGAMAN 3:
+                // Jika artisan gagal atau .env masih belum memiliki APP_KEY valid (misal karena issue regex,
+                // cached config, format file .env Windows CRLF, dsb.), BUAT LANGSUNG lewat C# RNG!
                 if (kode != 0 || !PunyaAppKey(envPath))
+                {
+                    Log("artisan key:generate tidak mengisi .env, membuat kunci acak mandiri via C# RNGCryptoServiceProvider...");
+                    BuatAppKeyLangsung(envPath);
+                }
+
+                // Setelah kunci dibuat di .env, pastikan cache bootstrap tetap bersih agar jpos:prepare
+                // nanti membangun cache baru dengan APP_KEY yang benar.
+                HapusCacheBootstrap();
+
+                if (!PunyaAppKey(envPath))
                 {
                     // Tanpa APP_KEY, Laravel menolak setiap request terenkripsi - aplikasi tidak
                     // akan bisa dipakai. Lebih baik berhenti dengan pesan jelas daripada menyala
@@ -423,6 +447,94 @@ namespace JPOSLauncher
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Membersihkan cache bootstrap Laravel agar tidak tersangkut config atau route basi.
+        /// </summary>
+        private static void HapusCacheBootstrap()
+        {
+            try
+            {
+                string cacheDir = Path.Combine(appDir, "bootstrap", "cache");
+                if (Directory.Exists(cacheDir))
+                {
+                    foreach (string file in new string[] { "config.php", "routes-v7.php", "events.php", "jpos-cache-stamp" })
+                    {
+                        string target = Path.Combine(cacheDir, file);
+                        if (File.Exists(target))
+                        {
+                            try { File.Delete(target); } catch { }
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Membuat APP_KEY 256-bit (AES-256 base64) langsung via Cryptographic RNG C# dan menuliskannya ke .env.
+        /// Jaring pengaman mutlak jika artisan key:generate gagal atau terhambat regex / cached config.
+        /// </summary>
+        private static void BuatAppKeyLangsung(string envPath)
+        {
+            try
+            {
+                if (!File.Exists(envPath)) return;
+
+                byte[] keyBytes = new byte[32];
+                using (var rng = new RNGCryptoServiceProvider())
+                {
+                    rng.GetBytes(keyBytes);
+                }
+                string base64Key = "base64:" + Convert.ToBase64String(keyBytes);
+
+                string[] baris = File.ReadAllLines(envPath);
+                bool diganti = false;
+                for (int i = 0; i < baris.Length; i++)
+                {
+                    string b = baris[i].Trim();
+                    if (b.StartsWith("APP_KEY="))
+                    {
+                        baris[i] = "APP_KEY=" + base64Key;
+                        diganti = true;
+                        break;
+                    }
+                }
+
+                if (diganti)
+                {
+                    File.WriteAllLines(envPath, baris);
+                    Log("APP_KEY berhasil dibuat langsung ke dalam baris APP_KEY= (.env)");
+                }
+                else
+                {
+                    var daftarBaris = new List<string>(baris);
+                    int insertIdx = -1;
+                    for (int i = 0; i < daftarBaris.Count; i++)
+                    {
+                        if (daftarBaris[i].Trim().StartsWith("APP_ENV="))
+                        {
+                            insertIdx = i + 1;
+                            break;
+                        }
+                    }
+                    if (insertIdx >= 0)
+                    {
+                        daftarBaris.Insert(insertIdx, "APP_KEY=" + base64Key);
+                    }
+                    else
+                    {
+                        daftarBaris.Add("APP_KEY=" + base64Key);
+                    }
+                    File.WriteAllLines(envPath, daftarBaris.ToArray());
+                    Log("APP_KEY berhasil disisipkan ke dalam berkas .env");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("BuatAppKeyLangsung gagal: " + ex.Message);
+            }
         }
 
         private static void PerbaruiAppUrl(int port)
