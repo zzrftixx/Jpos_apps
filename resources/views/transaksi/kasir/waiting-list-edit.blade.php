@@ -436,7 +436,7 @@ function waitingEditApp() {
             this.errorMsg = '';
             this.processing = true;
             try {
-                const res = await fetch('{{ route('kasir.waiting-list.update', $sale) }}', {
+                const res = await fetch('{{ route('kasir.waiting-list.update', $sale, false) }}', {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
@@ -448,15 +448,25 @@ function waitingEditApp() {
                         discount: this.discount || 0,
                     }),
                 });
-                const data = await res.json();
+                let data = {};
+                try {
+                    data = await res.json();
+                } catch (_) {
+                    data = {};
+                }
                 if (!res.ok) {
-                    this.errorMsg = data.message || 'Terjadi kesalahan.';
-                    this.processing = false;
+                    if (res.status === 419) {
+                        this.errorMsg = 'Sesi telah kedaluwarsa. Silakan muat ulang (refresh) halaman.';
+                    } else {
+                        this.errorMsg = data.message || ('Terjadi kesalahan pada server (Status ' + res.status + ').');
+                    }
                     return;
                 }
                 window.location.href = data.redirect_url;
             } catch (e) {
-                this.errorMsg = 'Gagal menghubungi server.';
+                console.error('Waiting list update error:', e);
+                this.errorMsg = 'Gagal menghubungi server. Pastikan aplikasi JPOS.exe di komputer ini menyala.';
+            } finally {
                 this.processing = false;
             }
         },

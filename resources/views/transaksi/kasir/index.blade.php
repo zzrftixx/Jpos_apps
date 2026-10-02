@@ -2356,8 +2356,18 @@ function kasirApp() {
 
             // 2. Jika tidak ada di katalog lokal, hubungi server lewat endpoint kasir.scan (fallback)
             try {
-                const res = await fetch('{{ route('kasir.scan') }}?barcode=' + encodeURIComponent(bersih));
-                const data = await res.json();
+                const res = await fetch('{{ route('kasir.scan', [], false) }}?barcode=' + encodeURIComponent(bersih));
+                let data = {};
+                try {
+                    data = await res.json();
+                } catch (_) {
+                    data = {};
+                }
+
+                if (!res.ok) {
+                    this.beriTahuPindai(data.message || ('Gagal memindai produk (Status ' + res.status + ').'), true);
+                    return;
+                }
 
                 if (!data.found) {
                     this.beriTahuPindai(data.message || ('Barcode "' + bersih + '" tidak terdaftar.'), true);
@@ -2506,7 +2516,7 @@ function kasirApp() {
             this.processing = true;
 
             try {
-                const res = await fetch('{{ route('kasir.store') }}', {
+                const res = await fetch('{{ route('kasir.store', [], false) }}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -2578,7 +2588,7 @@ function kasirApp() {
             }
             this.processing = true;
             try {
-                const res = await fetch('{{ route('kasir.store') }}', {
+                const res = await fetch('{{ route('kasir.store', [], false) }}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -2595,9 +2605,19 @@ function kasirApp() {
                         due_date: this.isWaitingList ? (this.dueDate || null) : null,
                     }),
                 });
-                const data = await res.json();
+                let data = {};
+                try {
+                    data = await res.json();
+                } catch (_) {
+                    data = {};
+                }
+
                 if (!res.ok) {
-                    this.errorMsg = data.message || 'Terjadi kesalahan.';
+                    if (res.status === 419) {
+                        this.errorMsg = 'Sesi telah kedaluwarsa. Silakan muat ulang (refresh) halaman untuk melanjutkan.';
+                    } else {
+                        this.errorMsg = data.message || ('Terjadi kesalahan pada server (Status ' + res.status + ').');
+                    }
                     this.processing = false;
                     return;
                 }
@@ -2615,9 +2635,11 @@ function kasirApp() {
 
                 window.location.reload();
             } catch (e) {
+                console.error('Checkout network error:', e);
                 this.errorMsg = 'Gagal menghubungi server. Pastikan aplikasi JPOS.exe di komputer ini menyala.';
+            } finally {
+                this.processing = false;
             }
-            this.processing = false;
         },
 
         bukaDokumen(alamatStruk) {

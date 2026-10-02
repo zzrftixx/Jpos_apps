@@ -141,4 +141,31 @@ class SesiAplikasiTest extends JposTestCase
         // kali per menit; ambang "detak hilang" harus jauh di atas itu.
         $this->assertGreaterThan(60, $detakHilang);
     }
+
+    /**
+     * Sesi pada POS desktop lokal wajib sangat panjang (minimal 1 tahun) agar kasir
+     * tidak tiba-tiba mengalami token mismatch / 419 Page Expired di tengah jam operasional.
+     */
+    public function test_konfigurasi_sesi_cukup_panjang_agar_kasir_pos_tidak_logout_saat_toko_sepi(): void
+    {
+        $this->assertGreaterThanOrEqual(525600, config('session.lifetime'));
+    }
+
+    /**
+     * Pemanggilan fetch pada halaman kasir, edit waiting list, dan retur wajib memakai
+     * URL relatif (argumen ketiga false pada route()) agar tidak terkunci ke domain/port APP_URL
+     * saat diakses dari perangkat LAN atau saat port bergeser otomatis.
+     */
+    public function test_endpoint_ajax_kasir_menggunakan_url_relatif_agar_kebal_akses_lan(): void
+    {
+        $kasirBlade = file_get_contents(resource_path('views/transaksi/kasir/index.blade.php'));
+        $waitingBlade = file_get_contents(resource_path('views/transaksi/kasir/waiting-list-edit.blade.php'));
+        $returBlade = file_get_contents(resource_path('views/transaksi/retur/index.blade.php'));
+
+        $this->assertStringContainsString("route('kasir.store', [], false)", $kasirBlade);
+        $this->assertStringContainsString("route('kasir.scan', [], false)", $kasirBlade);
+        $this->assertStringContainsString("route('kasir.waiting-list.update', \$sale, false)", $waitingBlade);
+        $this->assertStringContainsString("route('retur.store', [], false)", $returBlade);
+        $this->assertStringContainsString("route('retur.find', [], false)", $returBlade);
+    }
 }

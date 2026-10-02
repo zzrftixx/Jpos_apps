@@ -649,8 +649,21 @@ namespace JPOSLauncher
                 {
                     try
                     {
-                        if (p.MainModule != null &&
-                            p.MainModule.FileName.StartsWith(appDir, StringComparison.OrdinalIgnoreCase))
+                        bool milikKita = false;
+                        try
+                        {
+                            if (p.MainModule != null &&
+                                p.MainModule.FileName.StartsWith(appDir, StringComparison.OrdinalIgnoreCase))
+                            {
+                                milikKita = true;
+                            }
+                        }
+                        catch
+                        {
+                            // Proses asing / beda bitness atau batasan hak akses (UAC)
+                        }
+
+                        if (milikKita)
                         {
                             Log("Mematikan sisa proses php lama (PID " + p.Id + ")");
                             p.Kill();
@@ -997,10 +1010,24 @@ namespace JPOSLauncher
 
             try
             {
+                // Auto-Heal: Jika proses PHP berhenti tanpa sengaja saat launcher masih siaga di tray,
+                // nyalakan kembali secara otomatis agar kasir tidak mengalami 'This site can't be reached'.
+                if (phpProcess != null && phpProcess.HasExited && !sedangKeluar)
+                {
+                    Log("PERINGATAN: Proses PHP berhenti tiba-tiba. Menyalakan ulang server PHP di port " + serverPort + "...");
+                    StartPhpServer(serverPort);
+                }
+
                 // Pintasan diklik lagi selagi aplikasi masih hidup.
                 if (sinyalBukaJendela != null && sinyalBukaJendela.WaitOne(0))
                 {
                     Log("Pintasan diklik lagi, jendela aplikasi dibuka kembali.");
+
+                    if (phpProcess == null || phpProcess.HasExited)
+                    {
+                        Log("Memastikan server PHP aktif sebelum membuka browser...");
+                        StartPhpServer(serverPort);
+                    }
 
                     // Penanda lama dibuang lebih dulu: kalau permintaan ini datang tepat di
                     // sela-sela hitungan penutupan, hitungan itu harus batal dan dimulai

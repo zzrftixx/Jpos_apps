@@ -297,14 +297,28 @@ function returApp() {
             this.additionalPayment = 0;
             this.additionalPaymentMethod = 'tunai';
             if (!this.invoiceNo) return;
-            const res = await fetch(`{{ route('retur.find') }}?invoice_no=${encodeURIComponent(this.invoiceNo)}`);
-            const data = await res.json();
-            if (!data.found) {
-                this.errorMsg = 'Transaksi tidak ditemukan.';
-                return;
+            try {
+                const res = await fetch(`{{ route('retur.find', [], false) }}?invoice_no=${encodeURIComponent(this.invoiceNo)}`);
+                let data = {};
+                try {
+                    data = await res.json();
+                } catch (_) {
+                    data = {};
+                }
+                if (!res.ok) {
+                    this.errorMsg = data.message || ('Gagal memuat transaksi (Status ' + res.status + ').');
+                    return;
+                }
+                if (!data.found) {
+                    this.errorMsg = 'Transaksi tidak ditemukan.';
+                    return;
+                }
+                this.sale = data.sale;
+                this.returnQty = this.sale.items.map(() => 0);
+            } catch (e) {
+                console.error('Retur find error:', e);
+                this.errorMsg = 'Gagal menghubungi server. Pastikan aplikasi JPOS.exe di komputer ini menyala.';
             }
-            this.sale = data.sale;
-            this.returnQty = this.sale.items.map(() => 0);
         },
 
         async submit() {
@@ -321,7 +335,7 @@ function returApp() {
 
             this.processing = true;
             try {
-                const res = await fetch('{{ route('retur.store') }}', {
+                const res = await fetch('{{ route('retur.store', [], false) }}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -337,15 +351,25 @@ function returApp() {
                         additional_payment_method: this.additionalPaymentMethod,
                     }),
                 });
-                const data = await res.json();
+                let data = {};
+                try {
+                    data = await res.json();
+                } catch (_) {
+                    data = {};
+                }
                 if (!res.ok) {
-                    this.errorMsg = data.message || 'Terjadi kesalahan.';
-                    this.processing = false;
+                    if (res.status === 419) {
+                        this.errorMsg = 'Sesi telah kedaluwarsa. Silakan muat ulang (refresh) halaman.';
+                    } else {
+                        this.errorMsg = data.message || ('Terjadi kesalahan pada server (Status ' + res.status + ').');
+                    }
                     return;
                 }
                 window.location.reload();
             } catch (e) {
-                this.errorMsg = 'Gagal menghubungi server.';
+                console.error('Retur submit error:', e);
+                this.errorMsg = 'Gagal menghubungi server. Pastikan aplikasi JPOS.exe di komputer ini menyala.';
+            } finally {
                 this.processing = false;
             }
         },
