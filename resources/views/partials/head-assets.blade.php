@@ -41,4 +41,6 @@
 {{-- Penanda "jendela masih terbuka" untuk JPOS.exe, supaya server ikut mati saat aplikasi
      ditutup dan pintasan bisa dibuka lagi tanpa peringatan "JPOS sudah berjalan". --}}
 <script defer src="@aset('vendor/jpos-sesi.js')"></script>
+{{-- Akselerasi transisi halaman & prefetch tautan instan tanpa jeda --}}
+<script defer src="@aset('vendor/jpos-instant.js')"></script>
 <script defer src="@aset('vendor/alpine-3.15.12.min.js')"></script>

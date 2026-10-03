@@ -64,6 +64,11 @@ return [
             'journal_mode' => env('DB_JOURNAL_MODE', 'wal'),
             'synchronous' => env('DB_SYNCHRONOUS', 'normal'),
             'transaction_mode' => env('DB_TRANSACTION_MODE', 'IMMEDIATE'),
+            'pragmas' => [
+                'cache_size' => -64000,      // 64 MB RAM page cache (bawaan hanya 2 MB)
+                'mmap_size' => 268435456,    // 256 MB memory-mapped I/O untuk pembacaan instan tanpa syscall
+                'temp_store' => 'MEMORY',    // Simpan tabel sementara & indeks sorting di RAM
+            ],
         ],
 
         'mysql' => [
