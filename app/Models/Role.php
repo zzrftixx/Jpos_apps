@@ -38,6 +38,7 @@ class Role extends Model
             'pelanggan' => 'Master Data - Pelanggan',
             'planogram' => 'Master Data - Planogram (Peta Rak)',
             'kasir' => 'Transaksi - Kasir',
+            'promo' => 'Transaksi - Promo Produk',
             'retur' => 'Transaksi - Retur',
             'pembelian' => 'Transaksi - Pembelian &amp; Hutang',
             'kas' => 'Transaksi - Kas Masuk/Keluar',

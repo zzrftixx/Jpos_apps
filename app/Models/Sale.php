@@ -12,11 +12,15 @@ class Sale extends Model
         'invoice_no', 'customer_id', 'user_id', 'cashier_shift_id', 'subtotal', 'discount',
         'tax_amount', 'total', 'paid_amount', 'change_amount', 'payment_method', 'status',
         'order_status', 'due_date', 'note', 'parked_at',
+        'points_earned', 'points_redeemed', 'points_discount',
     ];
 
     protected $casts = [
         'due_date' => 'datetime',
         'parked_at' => 'datetime',
+        'points_earned' => 'integer',
+        'points_redeemed' => 'integer',
+        'points_discount' => 'float',
     ];
 
     /**

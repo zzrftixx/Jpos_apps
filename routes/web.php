@@ -11,6 +11,7 @@ use App\Http\Controllers\KasirController;
 use App\Http\Controllers\LaporanEksporController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\PromoController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\RackController;
 use App\Http\Controllers\ReportController;
@@ -111,6 +112,18 @@ Route::middleware('auth')->group(function () {
         Route::get('/print', [BarcodePrintController::class, 'print'])->name('print');
     });
 
+    // Promo Produk & Cetak Barcode Promo
+    Route::middleware('menu:promo,kasir')->prefix('promo')->name('promo.')->group(function () {
+        Route::get('/', [PromoController::class, 'index'])->name('index');
+        Route::get('/create', [PromoController::class, 'create'])->name('create');
+        Route::post('/', [PromoController::class, 'store'])->name('store');
+        Route::get('/{promotion}/edit', [PromoController::class, 'edit'])->name('edit');
+        Route::put('/{promotion}', [PromoController::class, 'update'])->name('update');
+        Route::delete('/{promotion}', [PromoController::class, 'destroy'])->name('destroy');
+        Route::post('/{promotion}/toggle', [PromoController::class, 'toggleActive'])->name('toggle');
+        Route::get('/{promotion}/cetak-barcode', [PromoController::class, 'cetakBarcode'])->name('cetak-barcode');
+    });
+
     // Shift Kasir
     Route::middleware('menu:shift,kasir')->prefix('shift')->name('shift.')->group(function () {
         Route::get('/', [CashierShiftController::class, 'index'])->name('index');
@@ -206,6 +219,9 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/pajak', [SettingController::class, 'pajak'])->name('pajak');
         Route::post('/pajak', [SettingController::class, 'updatePajak'])->name('pajak.update');
+
+        Route::get('/poin-loyalitas', [SettingController::class, 'poinLoyalitas'])->name('poin-loyalitas');
+        Route::post('/poin-loyalitas', [SettingController::class, 'updatePoinLoyalitas'])->name('poin-loyalitas.update');
 
         Route::get('/backup-restore', [SettingController::class, 'backupRestore'])->name('backup-restore');
         Route::post('/backup-restore/backup', [SettingController::class, 'createBackup'])->name('backup-restore.backup');

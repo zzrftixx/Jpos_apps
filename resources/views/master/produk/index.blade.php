@@ -247,36 +247,42 @@
                     </div>
                 </div>
 
-                {{-- Form Harga Mandiri per Kategori Pelanggan --}}
+                {{-- Form Harga Mandiri per Kategori Pelanggan (Dapat diaktifkan/dinonaktifkan) --}}
                 <div class="border rounded-xl p-3.5 bg-slate-50/70 border-slate-200 space-y-2.5">
-                    <div class="flex items-center justify-between">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
                         <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wide">
                             <span>🏷️ Harga Jual per Kategori Pelanggan</span>
                         </span>
-                        <span class="text-[11px] text-slate-500 font-medium">Otomatis dipilih di Kasir</span>
+                        <label class="flex items-center gap-2 text-xs font-medium text-slate-700 shrink-0 cursor-pointer select-none">
+                            <input type="hidden" name="tier_pricing_enabled" value="0">
+                            <input type="checkbox" name="tier_pricing_enabled" value="1" x-model="tierPricingEnabled"
+                                @change="if (!tierPricingEnabled) matikanHargaKategori()"
+                                class="rounded text-brand-600 focus:ring-brand-500">
+                            <span x-text="tierPricingEnabled ? 'Aktif (Reseller & Grosir)' : 'Aktifkan Harga Kategori'"></span>
+                        </label>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div class="grid grid-cols-1 gap-3" :class="tierPricingEnabled ? 'md:grid-cols-3' : ''">
                         <div>
                             <label class="form-label text-xs">
-                                Harga UMUM (Retail) <span class="text-red-500">*</span>
+                                <span x-text="tierPricingEnabled ? 'Harga UMUM (Retail)' : 'Harga Jual'"></span> <span class="text-red-500">*</span>
                             </label>
                             <input type="text" data-jpos-number data-number-decimals="2" name="sell_price" x-number="baseSellPrice" required class="form-input text-sm font-semibold">
                         </div>
-                        <div>
+                        <div x-show="tierPricingEnabled" x-cloak>
                             <label class="form-label text-xs">
                                 Harga Reseller <span class="text-slate-400 font-normal">(opsional)</span>
                             </label>
                             <input type="text" data-jpos-number data-number-decimals="2" data-number-empty="kosong" name="reseller_price" x-number="baseResellerPrice" placeholder="Ikut harga umum" class="form-input text-sm">
                         </div>
-                        <div>
+                        <div x-show="tierPricingEnabled" x-cloak>
                             <label class="form-label text-xs">
                                 Harga Grosir <span class="text-slate-400 font-normal">(opsional)</span>
                             </label>
                             <input type="text" data-jpos-number data-number-decimals="2" data-number-empty="kosong" name="grosir_price" x-number="baseGrosirPrice" placeholder="Ikut harga umum" class="form-input text-sm">
                         </div>
                     </div>
-                    <p class="text-[11px] text-slate-500 leading-relaxed">
+                    <p x-show="tierPricingEnabled" x-cloak class="text-[11px] text-slate-500 leading-relaxed">
                         💡 Kasir otomatis menerapkan harga sesuai kategori pelanggan yang dipilih (UMUM, Reseller, Grosir). Jika harga Reseller atau Grosir dikosongkan, sistem otomatis menggunakan Harga UMUM.
                     </p>
                 </div>
@@ -496,7 +502,7 @@
                                             </div>
 
                                             {{-- Harga Khusus Kategori Reseller & Grosir Satuan Ini --}}
-                                            <div class="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200/60">
+                                            <div x-show="tierPricingEnabled" x-cloak class="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200/60">
                                                 <div>
                                                     <label class="form-label text-xs">
                                                         Harga Reseller per <span class="font-semibold text-brand-700" x-text="unitsById[row.unit_id] || 'Kemasan Ini'"></span>
@@ -621,6 +627,8 @@ function masterProdukApp() {
         produkMode: @json($produkMode),
         imagePreview: null,
         grosirJasa: @json((bool) $grosirJasa),
+        defaultTierPricing: @json((bool) ($hargaKategoriPelanggan ?? true)),
+        tierPricingEnabled: @json((bool) ($hargaKategoriPelanggan ?? true)),
         unitsList: @json($units->pluck('name')),
         unitsById: @json($units->pluck('name', 'id')),
         daftarRak: @json($rakTersedia),
@@ -810,6 +818,17 @@ function masterProdukApp() {
             }
         },
 
+        matikanHargaKategori() {
+            if (!this.tierPricingEnabled) {
+                this.baseResellerPrice = '';
+                this.baseGrosirPrice = '';
+                this.unitRows.forEach(r => {
+                    r.reseller_price = '';
+                    r.grosir_price = '';
+                });
+            }
+        },
+
         /* ------------------------------------------------------- stok multi satuan */
 
         /* Stok boleh diketik dalam satuan mana pun dari rantai; yang dikirim ke server
@@ -856,6 +875,9 @@ function masterProdukApp() {
             this.baseSellPrice = Number(item.sell_price) || 0;
             this.baseResellerPrice = item.reseller_price !== null && item.reseller_price !== undefined ? Number(item.reseller_price) : '';
             this.baseGrosirPrice = item.grosir_price !== null && item.grosir_price !== undefined ? Number(item.grosir_price) : '';
+            const adaHargaKategoriUnit = (item.units || []).some(u => (u.reseller_price && Number(u.reseller_price) > 0) || (u.grosir_price && Number(u.grosir_price) > 0));
+            const adaHargaKategoriDasar = (item.reseller_price && Number(item.reseller_price) > 0) || (item.grosir_price && Number(item.grosir_price) > 0);
+            this.tierPricingEnabled = adaHargaKategoriDasar || adaHargaKategoriUnit || this.defaultTierPricing;
             this.unitRows = (item.units || []).map(u => ({
                 _key: this.nextUnitRowKey++,
                 unit_id: u.unit_id,
@@ -886,6 +908,7 @@ function masterProdukApp() {
             this.unit = 'Pcs';
             this.multiUnitEnabled = false;
             this.hppCalcEnabled = false;
+            this.tierPricingEnabled = this.defaultTierPricing;
             this.baseCostPrice = 0;
             this.baseSellPrice = 0;
             this.baseResellerPrice = '';

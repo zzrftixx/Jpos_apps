@@ -38,6 +38,7 @@ class KasirController extends Controller
 
         $categories = Category::orderBy('name')->get();
         $customers = Customer::orderBy('name')->get();
+        Setting::preload(['tax', 'kasir_display', 'template_struk', 'shift_kasir', 'cash_drawer', 'default_starting_cash', 'poin_loyalitas']);
         $tax = Setting::get('tax', ['enabled' => false, 'percent' => 0, 'include_in_price' => false]);
         ['view' => $defaultView, 'toggle' => $allowToggle] = Setting::kasirDisplayMode();
 
@@ -85,11 +86,12 @@ class KasirController extends Controller
         $cashDrawerEnabled = Setting::cashDrawerEnabled();
         $activeShift = $shiftKasirEnabled ? CashierShift::getActiveShift($request->user()->id) : null;
         $defaultStartingCash = Setting::defaultStartingCash();
+        $poinLoyalitas = Setting::poinLoyalitas();
 
         return view('transaksi.kasir.index', compact(
             'categories', 'customers', 'tax', 'productsForCart', 'defaultView', 'allowToggle',
             'keranjangDiambil', 'customerDiambil', 'discountDiambil', 'jumlahTertahan', 'jumlahPesanan', 'pilihDokumen', 'dokumenDefault',
-            'topProductIds', 'activeShift', 'shiftKasirEnabled', 'cashDrawerEnabled', 'shiftKasirSettings', 'defaultStartingCash'
+            'topProductIds', 'activeShift', 'shiftKasirEnabled', 'cashDrawerEnabled', 'shiftKasirSettings', 'defaultStartingCash', 'poinLoyalitas'
         ));
     }
 
@@ -161,6 +163,36 @@ class KasirController extends Controller
 
         if ($kode === '') {
             return response()->json(['found' => false, 'message' => 'Kode pindaian kosong.']);
+        }
+
+        // 0. Barcode khusus PROMO RAK
+        if (\Illuminate\Support\Facades\Schema::hasTable('promotion_items')) {
+            $today = now()->toDateString();
+            $promoItem = \App\Models\PromotionItem::with('product')
+                ->where('promo_barcode', $kode)
+                ->whereHas('promotion', function ($q) use ($today) {
+                    $q->where('is_active', true)
+                        ->where(function ($sq) use ($today) {
+                            $sq->whereNull('start_date')->orWhereDate('start_date', '<=', $today);
+                        })
+                        ->where(function ($sq) use ($today) {
+                            $sq->whereNull('end_date')->orWhereDate('end_date', '>=', $today);
+                        });
+                })
+                ->whereHas('product', fn ($q) => $q->where('is_active', true))
+                ->first();
+
+            if ($promoItem && $promoItem->product) {
+                return response()->json([
+                    'found' => true,
+                    'product' => $promoItem->product->toCartArray(),
+                    'unit_id' => null,
+                    'unit_name' => null,
+                    'promo_active' => true,
+                    'promo_price' => (float) $promoItem->promo_price,
+                    'promo_name' => $promoItem->promotion?->name,
+                ]);
+            }
         }
 
         // 1. Barcode milik satuan tertentu.
@@ -238,6 +270,7 @@ class KasirController extends Controller
             'items.*.qty' => ['required', 'numeric', 'min:0.001'],
             'items.*.unit_type' => ['nullable', 'string'],
             'discount' => ['nullable', 'numeric', 'min:0'],
+            'use_points_voucher' => ['nullable', 'boolean'],
             'paid_amount' => ['required', 'numeric', 'min:0'],
             'payment_method' => ['required', 'string'],
             'is_waiting_list' => ['nullable', 'boolean'],
@@ -355,6 +388,34 @@ class KasirController extends Controller
                 abort(422, 'Shift kasir belum dibuka. Harap buka shift kasir terlebih dahulu sebelum memproses transaksi.');
             }
 
+            $poinSettings = Setting::poinLoyalitas();
+            $pointsEarned = 0;
+            $pointsRedeemed = 0;
+            $pointsDiscount = 0;
+
+            if (!$isParked && $poinSettings['enabled'] && $customerId) {
+                $customerForPoints = Customer::lockForUpdate()->find($customerId);
+                if ($customerForPoints) {
+                    if ($request->boolean('use_points_voucher') && $customerForPoints->points >= $poinSettings['target_poin']) {
+                        $pointsRedeemed = (int) $poinSettings['target_poin'];
+                        $pointsDiscount = min((float) $poinSettings['nilai_voucher'], $subtotal);
+                        $customerForPoints->points = max(0, $customerForPoints->points - $pointsRedeemed);
+                        $customerForPoints->save();
+                    }
+
+                    if (!$isWaitingList) {
+                        $belanjaPerPoin = (float) $poinSettings['belanja_per_poin'];
+                        if ($belanjaPerPoin > 0 && $total > 0) {
+                            $pointsEarned = (int) floor($total / $belanjaPerPoin);
+                            if ($pointsEarned > 0) {
+                                $customerForPoints->points += $pointsEarned;
+                                $customerForPoints->save();
+                            }
+                        }
+                    }
+                }
+            }
+
             $sale = Sale::create([
                 'invoice_no' => Sale::generateInvoiceNo(),
                 'customer_id' => $data['customer_id'] ?? null,
@@ -375,6 +436,9 @@ class KasirController extends Controller
                 'due_date' => $data['due_date'] ?? null,
                 'parked_at' => $isParked ? now() : null,
                 'note' => $data['note'] ?? null,
+                'points_earned' => $pointsEarned,
+                'points_redeemed' => $pointsRedeemed,
+                'points_discount' => $pointsDiscount,
             ]);
 
             foreach ($lineItems as $li) {
@@ -572,6 +636,25 @@ class KasirController extends Controller
             if ($sale->paid_amount >= $sale->total) {
                 $sale->change_amount = $sale->paid_amount - $sale->total;
                 $sale->order_status = 'completed';
+
+                // Poin loyalitas bertambah saat pesanan lunas
+                if ($sale->customer_id) {
+                    $poinSettings = Setting::poinLoyalitas();
+                    if ($poinSettings['enabled']) {
+                        $belanjaPerPoin = (float) $poinSettings['belanja_per_poin'];
+                        if ($belanjaPerPoin > 0 && $sale->total > 0 && ($sale->points_earned ?? 0) === 0) {
+                            $earned = (int) floor($sale->total / $belanjaPerPoin);
+                            if ($earned > 0) {
+                                $cust = Customer::lockForUpdate()->find($sale->customer_id);
+                                if ($cust) {
+                                    $cust->points += $earned;
+                                    $cust->save();
+                                    $sale->points_earned = $earned;
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             $sale->save();
@@ -635,6 +718,19 @@ class KasirController extends Controller
                             'user_id' => auth()->id(),
                         ]);
                     }
+                }
+            }
+
+            if ($sale->customer_id) {
+                $cust = Customer::lockForUpdate()->find($sale->customer_id);
+                if ($cust) {
+                    if (($sale->points_earned ?? 0) > 0) {
+                        $cust->points = max(0, $cust->points - $sale->points_earned);
+                    }
+                    if (($sale->points_redeemed ?? 0) > 0) {
+                        $cust->points += $sale->points_redeemed;
+                    }
+                    $cust->save();
                 }
             }
 
@@ -703,6 +799,19 @@ class KasirController extends Controller
                         'note' => 'Hapus ' . ($sale->order_status === 'waiting' ? 'pesanan' : 'transaksi') . ' ' . $sale->invoice_no,
                         'user_id' => $request->user()->id,
                     ]);
+                }
+
+                if ($sale->customer_id) {
+                    $cust = Customer::lockForUpdate()->find($sale->customer_id);
+                    if ($cust) {
+                        if (($sale->points_earned ?? 0) > 0) {
+                            $cust->points = max(0, $cust->points - $sale->points_earned);
+                        }
+                        if (($sale->points_redeemed ?? 0) > 0) {
+                            $cust->points += $sale->points_redeemed;
+                        }
+                        $cust->save();
+                    }
                 }
             }
 

@@ -10,6 +10,9 @@ trait ResolvesUnitPricing
     /** @var array<string,bool>|null Peta nama satuan -> boleh pecahan, dihidrasi sekali. */
     private ?array $petaSatuanTimbangan = null;
 
+    /** @var array<int,float>|null Peta id produk -> harga promo aktif terendah hari ini, dihidrasi sekali per permintaan (B1). */
+    private ?array $petaHargaPromoAktif = null;
+
     /**
      * Tentukan konversi-ke-satuan-dasar, label satuan, harga (sudah memperhitungkan harga
      * grosir per satuan itu sendiri), dan apakah satuannya boleh dijual dengan qty pecahan.
@@ -39,6 +42,11 @@ trait ResolvesUnitPricing
                 $price = (float) $product->wholesale_price;
             } else {
                 $price = (float) $product->sell_price;
+            }
+
+            $promoPrice = $this->getActivePromoPrice($product->id);
+            if ($promoPrice !== null) {
+                $price = min($price, $promoPrice);
             }
 
             return [
@@ -114,5 +122,33 @@ trait ResolvesUnitPricing
         }
 
         return $this->petaSatuanTimbangan[$namaSatuan] ?? false;
+    }
+
+    /**
+     * Memeriksa apakah ada harga promosi aktif untuk produk ini pada hari ini.
+     * Dihidrasi sekali per permintaan agar loop checkout di dalam transaksi tidak menjalankan N+1 query (B1).
+     */
+    protected function getActivePromoPrice(int $productId): ?float
+    {
+        if ($this->petaHargaPromoAktif === null) {
+            $today = now()->toDateString();
+
+            $this->petaHargaPromoAktif = \Illuminate\Support\Facades\DB::table('promotion_items')
+                ->join('promotions', 'promotions.id', '=', 'promotion_items.promotion_id')
+                ->where('promotions.is_active', true)
+                ->where(function ($q) use ($today) {
+                    $q->whereNull('promotions.start_date')->orWhereDate('promotions.start_date', '<=', $today);
+                })
+                ->where(function ($q) use ($today) {
+                    $q->whereNull('promotions.end_date')->orWhereDate('promotions.end_date', '>=', $today);
+                })
+                ->selectRaw('promotion_items.product_id, MIN(promotion_items.promo_price) as min_promo_price')
+                ->groupBy('promotion_items.product_id')
+                ->pluck('min_promo_price', 'product_id')
+                ->map(fn ($v) => (float) $v)
+                ->all();
+        }
+
+        return $this->petaHargaPromoAktif[$productId] ?? null;
     }
 }

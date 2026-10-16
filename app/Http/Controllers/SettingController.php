@@ -269,6 +269,26 @@ class SettingController extends Controller
         return back()->with('success', 'Pengaturan pajak disimpan.');
     }
 
+    public function poinLoyalitas()
+    {
+        $settings = Setting::poinLoyalitas();
+        return view('pengaturan.poin-loyalitas', compact('settings'));
+    }
+
+    public function updatePoinLoyalitas(Request $request)
+    {
+        $data = $request->validate([
+            'belanja_per_poin' => ['required', 'numeric', 'min:1'],
+            'target_poin' => ['required', 'integer', 'min:1'],
+            'nilai_voucher' => ['required', 'numeric', 'min:1'],
+        ]);
+        $data['enabled'] = $request->boolean('enabled');
+
+        Setting::set('poin_loyalitas', $data);
+
+        return back()->with('success', 'Pengaturan poin & loyalitas pelanggan berhasil disimpan.');
+    }
+
     public function backupRestore(SqliteBackup $backup)
     {
         // Pengurutan dan pelabelannya ada di SqliteBackup::daftar() beserta alasannya:
@@ -493,6 +513,7 @@ class SettingController extends Controller
         // Mati secara bawaan. Toko sembako tidak pernah butuh grosir untuk jasa, dan dua kolom
         // yang tidak pernah diisi tetap menagih perhatian setiap kali produk baru dimasukkan.
         $data['grosir_jasa'] = $request->boolean('grosir_jasa');
+        $data['harga_kategori_pelanggan'] = $request->boolean('harga_kategori_pelanggan');
 
         Setting::set('produk_mode', $data);
 

@@ -10,16 +10,31 @@ class Setting extends Model
 
     /** Cache in-memory per siklus permintaan (request) untuk mencegah N+1 pembacaan settings (B1). */
     protected static array $memo = [];
+    private const MISSING = '__SETTING_MISSING__';
+
+    public static function preload(array $keys): void
+    {
+        $rows = self::whereIn('key', $keys)->get()->keyBy('key');
+        foreach ($keys as $k) {
+            if (isset($rows[$k])) {
+                $decoded = json_decode($rows[$k]->value, true);
+                self::$memo[$k] = (json_last_error() === JSON_ERROR_NONE ? $decoded : $rows[$k]->value);
+            } else {
+                self::$memo[$k] = self::MISSING;
+            }
+        }
+    }
 
     public static function get(string $key, $default = null)
     {
         if (array_key_exists($key, self::$memo)) {
-            return self::$memo[$key];
+            return self::$memo[$key] === self::MISSING ? $default : self::$memo[$key];
         }
 
         $row = self::where('key', $key)->first();
         if (!$row) {
-            return self::$memo[$key] = $default;
+            self::$memo[$key] = self::MISSING;
+            return $default;
         }
 
         $decoded = json_decode($row->value, true);
@@ -135,5 +150,20 @@ class Setting extends Model
             }
         }
         return (float) ($settings['default_starting_cash'] ?? 0);
+    }
+
+    /**
+     * Konfigurasi poin loyalitas pelanggan dan voucher belanja.
+     */
+    public static function poinLoyalitas(): array
+    {
+        $setting = self::get('poin_loyalitas', []);
+
+        return [
+            'enabled' => (bool) ($setting['enabled'] ?? false),
+            'belanja_per_poin' => max(1, (float) ($setting['belanja_per_poin'] ?? 10000)),
+            'target_poin' => max(1, (int) ($setting['target_poin'] ?? 50)),
+            'nilai_voucher' => max(1, (float) ($setting['nilai_voucher'] ?? 25000)),
+        ];
     }
 }

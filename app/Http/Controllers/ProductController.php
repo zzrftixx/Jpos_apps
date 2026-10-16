@@ -58,12 +58,14 @@ class ProductController extends Controller
         $units = Unit::orderBy('name')->get();
         $produkMode = Setting::produkMode();
 
-        // Fitur lanjutan: grosir untuk produk Jasa (Pengaturan > Mode Produk).
-        $grosirJasa = (bool) (Setting::get('produk_mode', [])['grosir_jasa'] ?? false);
+        // Fitur lanjutan: grosir untuk produk Jasa & Harga per Kategori Pelanggan (Pengaturan > Mode Produk).
+        $modeSettings = Setting::get('produk_mode', []);
+        $grosirJasa = (bool) ($modeSettings['grosir_jasa'] ?? false);
+        $hargaKategoriPelanggan = (bool) ($modeSettings['harga_kategori_pelanggan'] ?? true);
         $rakTersedia = $this->rakBesertaKotakKosong();
 
         return view('master.produk.index', compact(
-            'products', 'categories', 'suppliers', 'summary', 'units', 'produkMode', 'rakTersedia', 'grosirJasa'
+            'products', 'categories', 'suppliers', 'summary', 'units', 'produkMode', 'rakTersedia', 'grosirJasa', 'hargaKategoriPelanggan'
         ));
     }
 
@@ -541,6 +543,17 @@ class ProductController extends Controller
         if (! $data['multi_unit_enabled']) {
             $data['units'] = [];
             $data['hpp_calc_enabled'] = false;
+        }
+
+        // Jika saklar Harga Jual per Kategori Pelanggan dimatikan secara eksplisit di form,
+        // kosongkan harga Reseller & Grosir agar tidak ada harga tersembunyi yang tertinggal.
+        if ($request->has('tier_pricing_enabled') && ! $request->boolean('tier_pricing_enabled')) {
+            $data['reseller_price'] = null;
+            $data['grosir_price'] = null;
+            foreach ($data['units'] ?? [] as $k => $u) {
+                $data['units'][$k]['reseller_price'] = null;
+                $data['units'][$k]['grosir_price'] = null;
+            }
         }
 
         if ($data['hpp_calc_enabled']) {

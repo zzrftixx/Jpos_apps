@@ -115,6 +115,7 @@
                 @endif
             </a>
             <a href="{{ route('barcode.index') }}" class="nav-link {{ request()->routeIs('barcode.*') ? 'nav-active' : '' }}"><x-icon.barcode /> Cetak Barcode</a>
+            <a href="{{ route('promo.index') }}" class="nav-link {{ request()->routeIs('promo.*') ? 'nav-active' : '' }}"><x-icon.percent /> Promo Produk</a>
             @endif
             @if($u->can_access('retur'))
             <a href="{{ route('retur.index') }}" class="nav-link {{ request()->routeIs('retur.*') ? 'nav-active' : '' }}"><x-icon.return /> Retur</a>
@@ -179,6 +180,7 @@
             <a href="{{ route('pengaturan.template-barcode') }}" class="nav-link {{ request()->routeIs('pengaturan.template-barcode') ? 'nav-active' : '' }}"><x-icon.barcode /> Template Barcode</a>
             <a href="{{ route('pengaturan.template-struk') }}" class="nav-link {{ request()->routeIs('pengaturan.template-struk') ? 'nav-active' : '' }}"><x-icon.receipt /> Template Struk</a>
             <a href="{{ route('pengaturan.pajak') }}" class="nav-link {{ request()->routeIs('pengaturan.pajak') ? 'nav-active' : '' }}"><x-icon.percent /> Pajak</a>
+            <a href="{{ route('pengaturan.poin-loyalitas') }}" class="nav-link {{ request()->routeIs('pengaturan.poin-loyalitas') ? 'nav-active' : '' }}"><x-icon.star /> Poin &amp; Loyalitas</a>
             <a href="{{ route('pengaturan.backup-restore') }}" class="nav-link {{ request()->routeIs('pengaturan.backup-restore') ? 'nav-active' : '' }}"><x-icon.database /> Backup &amp; Restore</a>
             <a href="{{ route('pengaturan.database') }}" class="nav-link {{ request()->routeIs('pengaturan.database') ? 'nav-active' : '' }}"><x-icon.database /> Database</a>
             <a href="{{ route('pengaturan.tentang') }}" class="nav-link {{ request()->routeIs('pengaturan.tentang') ? 'nav-active' : '' }}"><x-icon.store /> Tentang Aplikasi</a>
@@ -366,12 +368,14 @@
     .nav-active svg { color:#1c6ff0 !important; transform:scale(1.08); }
     .nav-group-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#64748b; padding:14px 12px 4px; }
     .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:8px; font-size:14px; font-weight:500; }
+    .btn-sm { padding:5px 10px; font-size:12px; border-radius:6px; gap:4px; }
     .btn-primary { background:#1c6ff0; color:#fff; }
     .btn-primary:hover { background:#1857c4; }
     .btn-outline { background:#fff; border:1px solid #e2e8f0; color:#334155; }
     .btn-outline:hover { background:#f8fafc; }
     .btn-danger { background:#fee2e2; color:#b91c1c; }
     .btn-danger:hover { background:#fecaca; }
+    .badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight:600; line-height:1.4; }
     .form-input, .form-select, .form-textarea { width:100%; border:1px solid #e2e8f0; border-radius:8px; padding:8px 12px; font-size:14px; }
     .form-input:focus, .form-select:focus, .form-textarea:focus { outline:none; border-color:#1c6ff0; box-shadow:0 0 0 2px rgba(28,111,240,.15); }
     .form-label { font-size:13px; font-weight:500; color:#475569; margin-bottom:4px; display:block; }

@@ -190,6 +190,20 @@
         @include('transaksi.kasir._baris-pembayaran')
     </table>
 
+    @if(($sale->points_earned ?? 0) > 0 || ($sale->points_redeemed ?? 0) > 0 || ($sale->customer && $sale->customer->points > 0))
+    <table class="inv-totals" style="margin-top:4px; font-size:0.85em;">
+        @if(($sale->points_redeemed ?? 0) > 0)
+        <tr><td>Poin Ditukar</td><td class="right">-{{ number_format($sale->points_redeemed, 0, ',', '.') }}</td></tr>
+        @endif
+        @if(($sale->points_earned ?? 0) > 0)
+        <tr><td>Poin Didapat</td><td class="right">+{{ number_format($sale->points_earned, 0, ',', '.') }}</td></tr>
+        @endif
+        @if($sale->customer)
+        <tr style="font-weight:bold;"><td>Sisa Poin Pelanggan</td><td class="right">{{ number_format($sale->customer->points, 0, ',', '.') }}</td></tr>
+        @endif
+    </table>
+    @endif
+
     @if($sale->order_status === 'waiting')
         <div class="center" style="margin-top:8px;">Sisa pembayaran dilunasi saat pengambilan barang.</div>
     @endif
@@ -372,6 +386,25 @@
         <tr style="font-weight:bold;"><td>{{ $isNota ? 'Jumlah Rp.' : 'TOTAL' }}</td><td class="right">{{ number_format($sale->total, 0, ',', '.') }}</td></tr>
         @include('transaksi.kasir._baris-pembayaran')
     </table>
+
+    @if(($sale->points_earned ?? 0) > 0 || ($sale->points_redeemed ?? 0) > 0 || ($sale->customer && $sale->customer->points > 0))
+    <hr>
+    <table style="font-size:0.9em;">
+        <colgroup>
+            <col style="width: 60%;">
+            <col style="width: 40%;">
+        </colgroup>
+        @if(($sale->points_redeemed ?? 0) > 0)
+        <tr><td>Poin Ditukar</td><td class="right">-{{ number_format($sale->points_redeemed, 0, ',', '.') }}</td></tr>
+        @endif
+        @if(($sale->points_earned ?? 0) > 0)
+        <tr><td>Poin Didapat</td><td class="right">+{{ number_format($sale->points_earned, 0, ',', '.') }}</td></tr>
+        @endif
+        @if($sale->customer)
+        <tr style="font-weight:bold;"><td>Sisa Poin Anda</td><td class="right">{{ number_format($sale->customer->points, 0, ',', '.') }}</td></tr>
+        @endif
+    </table>
+    @endif
     <hr>
 
     @if($sale->order_status === 'waiting')

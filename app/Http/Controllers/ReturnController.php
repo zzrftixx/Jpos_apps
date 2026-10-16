@@ -312,6 +312,19 @@ class ReturnController extends Controller
                 }
             }
 
+            if ($sale->customer_id) {
+                $cust = \App\Models\Customer::lockForUpdate()->find($sale->customer_id);
+                if ($cust) {
+                    if (($sale->points_earned ?? 0) > 0) {
+                        $cust->points = max(0, $cust->points - $sale->points_earned);
+                    }
+                    if (($sale->points_redeemed ?? 0) > 0) {
+                        $cust->points += $sale->points_redeemed;
+                    }
+                    $cust->save();
+                }
+            }
+
             $sale->order_status = 'cancelled';
             $sale->save();
         });

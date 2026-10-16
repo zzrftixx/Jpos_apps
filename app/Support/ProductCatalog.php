@@ -7,6 +7,7 @@ use App\Models\RackSlot;
 use App\Models\Unit;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Katalog produk yang ditanam ke halaman Kasir & Retur sebagai JSON.
@@ -75,11 +76,36 @@ class ProductCatalog
             ])
             ->all();
 
+        $today = now()->toDateString();
+        $petaPromo = DB::table('promotion_items')
+            ->join('promotions', 'promotions.id', '=', 'promotion_items.promotion_id')
+            ->where('promotions.is_active', true)
+            ->where(function ($q) use ($today) {
+                $q->whereNull('promotions.start_date')->orWhereDate('promotions.start_date', '<=', $today);
+            })
+            ->where(function ($q) use ($today) {
+                $q->whereNull('promotions.end_date')->orWhereDate('promotions.end_date', '>=', $today);
+            })
+            ->select(
+                'promotion_items.product_id',
+                'promotion_items.promo_price',
+                'promotion_items.promo_barcode',
+                'promotions.name as promo_name'
+            )
+            ->get()
+            ->keyBy('product_id')
+            ->map(fn ($item) => [
+                'promo_price' => (float) $item->promo_price,
+                'promo_barcode' => (string) ($item->promo_barcode ?? ''),
+                'promo_name' => (string) ($item->promo_name ?? ''),
+            ])
+            ->all();
+
         return Product::with(['units.unit', 'category'])
             ->where('is_active', true)
             ->orderBy('name')
             ->get()
-            ->map(fn (Product $product) => $product->toCartArray($petaTimbangan, $petaLokasi))
+            ->map(fn (Product $product) => $product->toCartArray($petaTimbangan, $petaLokasi, $petaPromo))
             ->values()
             ->all();
     }
@@ -116,6 +142,7 @@ class ProductCatalog
             $units->jumlah, $units->terbaru,
             $satuan->jumlah, $satuan->terbaru,
             $rak->jumlah, $rak->terbaru,
+            now()->toDateString(),
         ]));
     }
 }

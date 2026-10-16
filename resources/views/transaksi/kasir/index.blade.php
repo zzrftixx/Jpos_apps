@@ -739,7 +739,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                 {{-- Baris Input Pencarian & Pindai Barcode --}}
                 <div class="kasir-search-row">
                     <div class="relative flex-1">
-                        <input type="text" x-model="search" x-ref="searchInput" @keydown.enter.prevent="cariAtauPindai()"
+                        <input type="text" x-model.debounce.120ms="search" x-ref="searchInput" @keydown.enter.prevent="cariAtauPindai()"
                             placeholder="Cari nama produk, SKU, atau scan barcode... (Enter)"
                             class="kasir-search-input">
                         <svg class="kasir-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"/></svg>
@@ -790,7 +790,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                             </svg>
                             <span>Terlaris</span>
                         </span>
-                        <span class="kat-badge" x-text="allProducts.filter(p => topProductIds.includes(p.id)).length"></span>
+                        <span class="kat-badge" x-text="categoryCounts['terlaris'] || 0"></span>
                     </button>
 
                     {{-- Tombol Semua Kategori --}}
@@ -799,7 +799,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                             :class="categoryId === '' ? 'is-active' : ''">
                         <span class="kat-dot"></span>
                         <span>Semua Kategori</span>
-                        <span class="kat-badge" x-text="allProducts.length"></span>
+                        <span class="kat-badge" x-text="categoryCounts['all'] || allProducts.length"></span>
                     </button>
 
                     {{-- Tombol Tiap Kategori Berwarna --}}
@@ -814,7 +814,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                             title="Klik untuk menyaring / klik lagi untuk batal">
                         <span class="kat-dot"></span>
                         <span>{{ $cat->name }}</span>
-                        <span class="kat-badge" x-text="allProducts.filter(p => String(p.category_id) === '{{ $cat->id }}').length"></span>
+                        <span class="kat-badge" x-text="categoryCounts['{{ $cat->id }}'] || 0"></span>
                     </button>
                     @endforeach
 
@@ -852,6 +852,11 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                                 </div>
                                 {{-- Badge Stok di pojok foto --}}
                                 <div class="absolute top-1.5 right-1.5">
+                                    <template x-if="p.promo_active">
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white shadow-xs">
+                                            🏷️ Promo
+                                        </span>
+                                    </template>
                                     <template x-if="p.type === 'jasa'">
                                         <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-600/90 text-white shadow-xs">
                                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -877,7 +882,12 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                         <div class="mt-2.5 pt-2 border-t border-slate-100">
                             <div class="flex items-baseline justify-between gap-1">
                                 <div class="text-sm sm:text-base font-black text-brand-600 tracking-tight" x-text="'Rp ' + formatNumber(displayPrice(p))"></div>
-                                <template x-if="customerType() !== 'UMUM' && displayPrice(p) !== Number(p.sell_price)">
+                                <template x-if="p.promo_active">
+                                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-200">
+                                        Promo
+                                    </span>
+                                </template>
+                                <template x-if="!p.promo_active && customerType() !== 'UMUM' && displayPrice(p) !== Number(p.sell_price)">
                                     <span class="text-[10px] font-bold px-1.5 py-0.5 rounded"
                                           :class="customerType() === 'RESELLER' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'"
                                           x-text="customerType() === 'RESELLER' ? 'Reseller' : 'Grosir'"></span>
@@ -892,6 +902,11 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                         </div>
                     </button>
                 </template>
+                <div x-show="hasMoreProducts" class="col-span-full py-2 text-center">
+                    <button type="button" @click="loadMoreProducts()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl border border-slate-300 transition">
+                        Menampilkan <span x-text="filteredProducts.length"></span> dari <span x-text="totalFilteredCount"></span> produk &bull; Muat Lebih Banyak
+                    </button>
+                </div>
                 <template x-if="filteredProducts.length === 0">
                     <div class="col-span-full text-center text-slate-400 py-20 bg-white rounded-2xl border border-slate-200/60">
                         <div class="w-12 h-12 mx-auto mb-2 text-slate-300 flex items-center justify-center rounded-2xl bg-slate-50">
@@ -929,6 +944,11 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                                                     <span>🔥 Terlaris</span>
                                                 </span>
                                             </template>
+                                            <template x-if="p.promo_active">
+                                                <span class="inline-flex items-center gap-0.5 text-[10px] font-bold text-red-700 bg-red-100 border border-red-200 px-1.5 py-0.5 rounded-md">
+                                                    <span>🏷️ Promo</span>
+                                                </span>
+                                            </template>
                                             <template x-if="p.category_name">
                                                 <span class="text-[10px] font-semibold text-slate-600 bg-slate-100 border border-slate-200/80 px-1.5 py-0.5 rounded-md" x-text="p.category_name"></span>
                                             </template>
@@ -948,7 +968,12 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                                         </template>
                                     <td class="py-2 px-3 text-right">
                                         <div class="font-bold text-slate-900" x-text="'Rp ' + formatNumber(displayPrice(p))"></div>
-                                        <template x-if="customerType() !== 'UMUM' && displayPrice(p) !== Number(p.sell_price)">
+                                        <template x-if="p.promo_active">
+                                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded inline-block mt-0.5 bg-red-100 text-red-700 border border-red-200">
+                                                Promo
+                                            </span>
+                                        </template>
+                                        <template x-if="!p.promo_active && customerType() !== 'UMUM' && displayPrice(p) !== Number(p.sell_price)">
                                             <span class="text-[10px] font-bold px-1.5 py-0.5 rounded inline-block mt-0.5"
                                                   :class="customerType() === 'RESELLER' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'"
                                                   x-text="customerType() === 'RESELLER' ? 'Reseller' : 'Grosir'"></span>
@@ -967,6 +992,13 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                                     </td>
                                 </tr>
                             </template>
+                            <tr x-show="hasMoreProducts">
+                                <td colspan="5" class="py-2 text-center bg-slate-50 border-t border-slate-200">
+                                    <button type="button" @click="loadMoreProducts()" class="px-4 py-1 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition shadow-sm">
+                                        Menampilkan <span x-text="filteredProducts.length"></span> dari <span x-text="totalFilteredCount"></span> produk &bull; Muat Lebih Banyak
+                                    </button>
+                                </td>
+                            </tr>
                             <template x-if="filteredProducts.length === 0">
                                 <tr><td colspan="5" class="text-center text-slate-400 py-12">Produk tidak ditemukan.</td></tr>
                             </template>
@@ -1070,6 +1102,37 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                             </template>
                         </div>
                     </div>
+
+                    {{-- Poin Loyalitas & Tombol Tukar Voucher --}}
+                    <template x-if="customerId && poinSettings.enabled">
+                        <div class="mt-2 p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                            <div class="flex items-center justify-between flex-wrap gap-1">
+                                <div class="flex items-center gap-1.5 text-slate-700">
+                                    <span class="font-bold text-slate-800">⭐ Poin:</span>
+                                    <span class="font-bold text-brand-600" x-text="formatNumber(customerPoints())"></span>
+                                    <span class="text-slate-400 text-[11px]" x-show="customerPoints() < poinSettings.target_poin">
+                                        (target: <span x-text="formatNumber(poinSettings.target_poin)"></span>)
+                                    </span>
+                                </div>
+                                <div>
+                                    <template x-if="customerPoints() >= poinSettings.target_poin">
+                                        <div>
+                                            <button type="button" @click="togglePointsVoucher()"
+                                                    class="btn btn-sm text-[11px] font-bold py-1 px-2.5 transition"
+                                                    :class="usePointsVoucher ? 'bg-green-700 text-white' : 'bg-green-100 text-green-800 border border-green-300'">
+                                                <span x-text="usePointsVoucher ? '✓ Voucher Dipakai (-Rp ' + formatNumber(poinSettings.nilai_voucher) + ')' : '🎁 Tukar Voucher (Potong Rp ' + formatNumber(poinSettings.nilai_voucher) + ')'"></span>
+                                            </button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                            <template x-if="usePointsVoucher">
+                                <div class="mt-1 text-[11px] text-green-700 font-medium">
+                                    Potongan voucher Rp <span x-text="formatNumber(poinSettings.nilai_voucher)"></span> diterapkan pada diskon belanja.
+                                </div>
+                            </template>
+                        </div>
+                    </template>
                 </div>
 
 
@@ -1616,6 +1679,9 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
     </div>
 
 @push('scripts')
+@php
+    $poinSettingsData = $poinLoyalitas ?? \App\Models\Setting::poinLoyalitas();
+@endphp
 <script>
 function kasirApp() {
     return {
@@ -1638,21 +1704,149 @@ function kasirApp() {
         dokumenCetak: @json($dokumenDefault ?? 'struk'),
         customerId: '',
         customerTypesById: @json($customers->pluck('customer_type', 'id')),
+        customerPointsById: @json($customers->pluck('points', 'id')),
+        poinSettings: @json($poinSettingsData),
+        usePointsVoucher: false,
+        voucherDiscountApplied: 0,
+        displayLimit: 60,
+        barcodeIndex: null,
+        categoryCounts: {},
+        topProductSet: null,
+
+        initPerformanceIndexes() {
+            this.topProductSet = new Set(this.topProductIds || []);
+            this.barcodeIndex = new Map();
+            const counts = { all: this.allProducts.length, terlaris: 0 };
+
+            for (let i = 0; i < this.allProducts.length; i++) {
+                this.indexProduct(this.allProducts[i], counts);
+            }
+
+            this.categoryCounts = counts;
+        },
+
+        indexProduct(p, countsRef) {
+            const unitNames = (p.additional_units || []).map(u => (u.unit_name || '') + ' ' + (u.barcode || '')).join(' ');
+            p._searchText = (
+                (p.name || '') + ' ' +
+                (p.sku || '') + ' ' +
+                (p.barcode || '') + ' ' +
+                (p.promo_barcode || '') + ' ' +
+                unitNames
+            ).toLowerCase();
+
+            if (countsRef) {
+                if (this.topProductSet && this.topProductSet.has(p.id)) {
+                    countsRef.terlaris++;
+                }
+                if (p.category_id) {
+                    const catKey = String(p.category_id);
+                    countsRef[catKey] = (countsRef[catKey] || 0) + 1;
+                }
+            }
+
+            if (!this.barcodeIndex) {
+                this.barcodeIndex = new Map();
+            }
+
+            if (p.barcode) {
+                this.indexBarcodeKey(p.barcode, { product: p, unitType: 'base', isPromo: false });
+            }
+
+            if (p.sku) {
+                this.indexBarcodeKey(p.sku, { product: p, unitType: 'base', isPromo: false });
+            }
+
+            if (p.promo_active && p.promo_barcode) {
+                this.indexBarcodeKey(p.promo_barcode, { product: p, unitType: 'base', isPromo: true });
+            }
+
+            if (p.additional_units && p.additional_units.length > 0) {
+                for (let j = 0; j < p.additional_units.length; j++) {
+                    const u = p.additional_units[j];
+                    if (u.barcode) {
+                        this.indexBarcodeKey(u.barcode, {
+                            product: p,
+                            unitType: 'unit_' + u.id,
+                            unitName: u.unit_name,
+                            isPromo: false
+                        });
+                    }
+                }
+            }
+        },
+
+        indexBarcodeKey(key, entry) {
+            if (!key || !this.barcodeIndex) return;
+            const raw = String(key).trim().toLowerCase();
+            if (!raw) return;
+            this.barcodeIndex.set(raw, entry);
+            const stripped = raw.replace(/^0+/, '');
+            if (stripped && stripped !== raw && !this.barcodeIndex.has(stripped)) {
+                this.barcodeIndex.set(stripped, entry);
+            }
+        },
+
+        lookupBarcode(code) {
+            if (!code || !this.barcodeIndex) return null;
+            const raw = String(code).trim().toLowerCase();
+            if (!raw) return null;
+            let hit = this.barcodeIndex.get(raw);
+            if (!hit) {
+                const stripped = raw.replace(/^0+/, '');
+                if (stripped && stripped !== raw) {
+                    hit = this.barcodeIndex.get(stripped);
+                }
+            }
+            return hit || null;
+        },
+
+        hasBarcode(code) {
+            return Boolean(this.lookupBarcode(code));
+        },
 
         customerType() {
             if (!this.customerId) return 'UMUM';
             return (this.customerTypesById[this.customerId] || 'UMUM').toUpperCase();
         },
 
+        customerPoints() {
+            if (!this.customerId) return 0;
+            return Number(this.customerPointsById[this.customerId] || 0);
+        },
+
+        togglePointsVoucher() {
+            if (!this.poinSettings || !this.poinSettings.enabled) return;
+            if (this.customerPoints() < Number(this.poinSettings.target_poin || 0)) return;
+
+            this.usePointsVoucher = !this.usePointsVoucher;
+            const nilaiVoucher = Number(this.poinSettings.nilai_voucher || 0);
+
+            if (this.usePointsVoucher) {
+                const sub = this.subtotal();
+                const currentDisc = Number(this.discount) || 0;
+                const tambahan = Math.min(nilaiVoucher, Math.max(0, sub - currentDisc));
+                this.voucherDiscountApplied = tambahan > 0 ? tambahan : nilaiVoucher;
+                this.discount = currentDisc + this.voucherDiscountApplied;
+            } else {
+                const kurangi = this.voucherDiscountApplied || nilaiVoucher;
+                this.discount = Math.max(0, (Number(this.discount) || 0) - kurangi);
+                this.voucherDiscountApplied = 0;
+            }
+        },
+
         displayPrice(p) {
             const tipe = this.customerType();
+            let price = Number(p.sell_price);
             if (tipe === 'RESELLER' && p.reseller_price && Number(p.reseller_price) > 0) {
-                return Number(p.reseller_price);
+                price = Number(p.reseller_price);
+            } else if (tipe === 'GROSIR' && p.grosir_price && Number(p.grosir_price) > 0) {
+                price = Number(p.grosir_price);
             }
-            if (tipe === 'GROSIR' && p.grosir_price && Number(p.grosir_price) > 0) {
-                return Number(p.grosir_price);
+            if (p.promo_active && p.promo_price && Number(p.promo_price) > 0) {
+                price = Math.min(price, Number(p.promo_price));
             }
-            return Number(p.sell_price);
+            return price;
         },
         discount: 0,
         paymentMethod: 'tunai',
@@ -1731,6 +1925,8 @@ function kasirApp() {
         _timerDraf: null,
 
         init() {
+            this.initPerformanceIndexes();
+
             if (this.allowToggle) {
                 this.viewMode = localStorage.getItem('kasir_view_mode') || '{{ $defaultView }}';
             }
@@ -1787,18 +1983,27 @@ function kasirApp() {
                 }
             });
 
+            this.$watch('customerId', () => {
+                if (this.usePointsVoucher) {
+                    const kurangi = this.voucherDiscountApplied || Number(this.poinSettings?.nilai_voucher || 0);
+                    this.discount = Math.max(0, (Number(this.discount) || 0) - kurangi);
+                    this.usePointsVoucher = false;
+                    this.voucherDiscountApplied = 0;
+                }
+            });
+
+            this.$watch('categoryId', () => {
+                this.displayLimit = 60;
+            });
+
             // Auto-pindai saat teks pencarian cocok persis dengan barcode terdaftar (untuk scanner fisik tanpa akhiran Enter)
             this.$watch('search', (val) => {
                 clearTimeout(this._searchBarcodeTimer);
+                this.displayLimit = 60;
                 const teks = (val || '').trim();
                 if (!teks || teks.length < 3) return;
 
-                const adaBarcodePersis = this.allProducts.some(p =>
-                    (p.barcode && this.samaBarcode(p.barcode, teks)) ||
-                    (p.additional_units && p.additional_units.some(u => u.barcode && this.samaBarcode(u.barcode, teks)))
-                );
-
-                if (adaBarcodePersis) {
+                if (this.hasBarcode(teks)) {
                     this._searchBarcodeTimer = setTimeout(() => {
                         if ((this.search || '').trim() === teks) {
                             this.cariAtauPindai();
@@ -1858,6 +2063,8 @@ function kasirApp() {
                     cart: this.cart,
                     customerId: this.customerId,
                     discount: this.discount,
+                    usePointsVoucher: this.usePointsVoucher,
+                    voucherDiscountApplied: this.voucherDiscountApplied,
                     paymentMethod: this.paymentMethod,
                     paidAmount: this.paidAmount,
                     isWaitingList: this.isWaitingList,
@@ -1963,6 +2170,8 @@ function kasirApp() {
             this.cart = keranjangValid;
             this.customerId = data.customerId || '';
             this.discount = data.discount || 0;
+            this.usePointsVoucher = !!data.usePointsVoucher;
+            this.voucherDiscountApplied = Number(data.voucherDiscountApplied || 0);
             this.paymentMethod = data.paymentMethod || 'tunai';
             this.paidAmount = data.paidAmount || 0;
             this.isWaitingList = !!data.isWaitingList;
@@ -2004,21 +2213,22 @@ function kasirApp() {
             return aTanpaNol !== '' && aTanpaNol === bTanpaNol;
         },
 
-        get filteredProducts() {
+        get allFilteredProducts() {
             const hasSearch = (this.search || '').trim().length > 0;
             const term = (this.search || '').trim().toLowerCase();
 
             let list = this.allProducts.filter(p => {
-                const matchSearch = !hasSearch ||
+                const matchSearch = !hasSearch || (p._searchText ? p._searchText.includes(term) : (
                     (p.name && p.name.toLowerCase().includes(term)) ||
                     (p.barcode && this.cocokBarcode(p.barcode, term)) ||
                     (p.sku && String(p.sku).toLowerCase().includes(term)) ||
-                    (p.additional_units && p.additional_units.some(u => u.barcode && this.cocokBarcode(u.barcode, term)));
+                    (p.additional_units && p.additional_units.some(u => u.barcode && this.cocokBarcode(u.barcode, term)))
+                ));
 
                 let matchCat = true;
                 if (!hasSearch) {
                     if (this.categoryId === 'terlaris') {
-                        matchCat = this.topProductIds.includes(p.id);
+                        matchCat = this.topProductSet ? this.topProductSet.has(p.id) : this.topProductIds.includes(p.id);
                     } else if (this.categoryId !== '') {
                         matchCat = String(p.category_id) === String(this.categoryId);
                     }
@@ -2035,6 +2245,22 @@ function kasirApp() {
             }
 
             return list;
+        },
+
+        get filteredProducts() {
+            return this.allFilteredProducts.slice(0, this.displayLimit);
+        },
+
+        get totalFilteredCount() {
+            return this.allFilteredProducts.length;
+        },
+
+        get hasMoreProducts() {
+            return this.allFilteredProducts.length > this.displayLimit;
+        },
+
+        loadMoreProducts() {
+            this.displayLimit += 60;
         },
 
         onProductClick(p) {
@@ -2108,6 +2334,9 @@ function kasirApp() {
                     base_unit: p.unit || 'pcs',
                     type: p.type,
                     is_weighable: isWeighable,
+                    promo_active: Boolean(p.promo_active),
+                    promo_price: p.promo_price ? Number(p.promo_price) : 0,
+                    promo_name: p.promo_name || '',
                     qty: 1,
                 });
                 this.sorotBaris(this.cart.length - 1);
@@ -2186,19 +2415,24 @@ function kasirApp() {
 
         linePrice(item) {
             const tipe = this.customerType();
+            let price = Number(item.sell_price);
             if (tipe === 'RESELLER' && item.reseller_price && Number(item.reseller_price) > 0) {
-                return Number(item.reseller_price);
+                price = Number(item.reseller_price);
+            } else if (tipe === 'GROSIR' && item.grosir_price && Number(item.grosir_price) > 0) {
+                price = Number(item.grosir_price);
+            } else if (this.isWholesaleActive(item)) {
+                price = Number(item.wholesale_price);
             }
-            if (tipe === 'GROSIR' && item.grosir_price && Number(item.grosir_price) > 0) {
-                return Number(item.grosir_price);
+            if (item.promo_active && item.promo_price && Number(item.promo_price) > 0) {
+                price = Math.min(price, Number(item.promo_price));
             }
-            if (this.isWholesaleActive(item)) {
-                return Number(item.wholesale_price);
-            }
-            return Number(item.sell_price);
+            return price;
         },
 
         activeTierBadge(item) {
+            if (item.promo_active && item.promo_price && Number(item.promo_price) > 0 && this.linePrice(item) === Number(item.promo_price)) {
+                return { label: 'Promo', class: 'bg-red-100 text-red-700' };
+            }
             const tipe = this.customerType();
             if (tipe === 'RESELLER' && item.reseller_price && Number(item.reseller_price) > 0) {
                 return { label: 'Reseller', class: 'bg-blue-100 text-blue-700' };
@@ -2328,33 +2562,26 @@ function kasirApp() {
             const bersih = (kode || '').trim();
             if (!bersih) return;
 
-            // 1. Cek langsung di katalog lokal (allProducts) tanpa menunggu latency network
-            for (const p of this.allProducts) {
-                if (p.additional_units && p.additional_units.length > 0) {
-                    const matchedUnit = p.additional_units.find(u => u.barcode && this.samaBarcode(u.barcode, bersih));
-                    if (matchedUnit) {
-                        this.addToCartWithUnit(p, 'unit_' + matchedUnit.id);
-                        this.beriTahuPindai(p.name + ' (' + matchedUnit.unit_name + ') ditambahkan ke keranjang.', false);
-                        this.search = '';
-                        this.focusSearch();
-                        return;
-                    }
+            // 0. Cek O(1) di barcodeIndex katalog lokal
+            const hit = this.lookupBarcode(bersih);
+            if (hit) {
+                const p = hit.product;
+                if (hit.isPromo) {
+                    this.addToCartWithUnit(p, 'base');
+                    this.beriTahuPindai(p.name + ' (Harga Promo) ditambahkan ke keranjang.', false);
+                } else if (hit.unitType && hit.unitType !== 'base') {
+                    this.addToCartWithUnit(p, hit.unitType);
+                    this.beriTahuPindai(p.name + ' (' + (hit.unitName || 'Satuan') + ') ditambahkan ke keranjang.', false);
+                } else {
+                    this.addToCartWithUnit(p, 'base');
+                    this.beriTahuPindai(p.name + ' ditambahkan ke keranjang.', false);
                 }
-            }
-
-            const exactProduct = this.allProducts.find(p =>
-                (p.barcode && this.samaBarcode(p.barcode, bersih)) ||
-                (p.sku && String(p.sku).trim().toLowerCase() === bersih.toLowerCase())
-            );
-            if (exactProduct) {
-                this.addToCartWithUnit(exactProduct, 'base');
-                this.beriTahuPindai(exactProduct.name + ' ditambahkan ke keranjang.', false);
                 this.search = '';
                 this.focusSearch();
                 return;
             }
 
-            // 2. Jika tidak ada di katalog lokal, hubungi server lewat endpoint kasir.scan (fallback)
+            // 1. Jika tidak ada di katalog lokal, hubungi server lewat endpoint kasir.scan (fallback)
             try {
                 const res = await fetch('{{ route('kasir.scan', [], false) }}?barcode=' + encodeURIComponent(bersih));
                 let data = {};
@@ -2378,6 +2605,12 @@ function kasirApp() {
                 if (!lokal) {
                     this.allProducts.push(data.product);
                     lokal = data.product;
+                    this.indexProduct(lokal, this.categoryCounts);
+                }
+                if (data.promo_active) {
+                    lokal.promo_active = true;
+                    lokal.promo_price = data.promo_price;
+                    lokal.promo_name = data.promo_name;
                 }
                 const unitType = data.unit_id ? ('unit_' + data.unit_id) : 'base';
 
@@ -2397,48 +2630,39 @@ function kasirApp() {
          * Jalur saat kasir menekan Enter di kolom pencarian.
          *
          * Bisa berupa barcode yang diketik manual, atau nama produk. Yang diperiksa dulu
-         * adalah apakah ada barcode / SKU yang COCOK PERSIS di katalog lokal - ini penting
-         * untuk barang yang barcodenya sobek dan kodenya diketik tangan.
+         * adalah apakah ada barcode / SKU yang COCOK PERSIS di katalog lokal (O(1) lookup).
          *
-         * Kalau bukan kode, TIDAK langsung dimasukkan ke keranjang. Nama produk bisa cocok ke
-         * banyak barang, dan memasukkan tebakan ke keranjang berarti menjual barang yang salah.
-         * Yang dilakukan: kalau hasil saringan tinggal SATU barang, barang itu dimasukkan -
-         * di titik itu tidak ada yang perlu ditebak. Kalau lebih dari satu, kasir diberi tahu
-         * berapa yang cocok dan memilih sendiri.
+         * Kalau bukan kode, TIDAK langsung dimasukkan ke keranjang. Jika hasil saringan tinggal
+         * SATU barang, barang itu dimasukkan langsung. Jika lebih dari satu, kasir diberi tahu.
          */
         async cariAtauPindai() {
-            const teks = (this.search || '').trim();
-
-            if (!teks) return;
-
-            const teksRendah = teks.toLowerCase();
-
-            // 1. Cek kecocokan PERSIS barcode satuan di katalog lokal
-            for (const p of this.allProducts) {
-                if (p.additional_units && p.additional_units.length > 0) {
-                    const matchedUnit = p.additional_units.find(u => u.barcode && this.samaBarcode(u.barcode, teks));
-                    if (matchedUnit) {
-                        this.search = '';
-                        this.addToCartWithUnit(p, 'unit_' + matchedUnit.id);
-                        this.beriTahuPindai(p.name + ' (' + matchedUnit.unit_name + ') ditambahkan ke keranjang.', false);
-                        return;
-                    }
-                }
+            // Sinkronkan langsung jika nilai input berbeda karena debounce
+            if (this.$refs.searchInput && this.$refs.searchInput.value !== this.search) {
+                this.search = this.$refs.searchInput.value;
             }
 
-            // 2. Cek kecocokan PERSIS barcode atau SKU produk di katalog lokal
-            const exactProduct = this.allProducts.find(p =>
-                (p.barcode && this.samaBarcode(p.barcode, teks)) ||
-                (p.sku && String(p.sku).trim().toLowerCase() === teksRendah)
-            );
-            if (exactProduct) {
+            const teks = (this.search || '').trim();
+            if (!teks) return;
+
+            // 0. Cek O(1) kecocokan persis barcode / SKU di katalog lokal
+            const hit = this.lookupBarcode(teks);
+            if (hit) {
+                const p = hit.product;
                 this.search = '';
-                this.addToCartWithUnit(exactProduct, 'base');
-                this.beriTahuPindai(exactProduct.name + ' ditambahkan ke keranjang.', false);
+                if (hit.isPromo) {
+                    this.addToCartWithUnit(p, 'base');
+                    this.beriTahuPindai(p.name + ' (Harga Promo) ditambahkan ke keranjang.', false);
+                } else if (hit.unitType && hit.unitType !== 'base') {
+                    this.addToCartWithUnit(p, hit.unitType);
+                    this.beriTahuPindai(p.name + ' (' + (hit.unitName || 'Satuan') + ') ditambahkan ke keranjang.', false);
+                } else {
+                    this.addToCartWithUnit(p, 'base');
+                    this.beriTahuPindai(p.name + ' ditambahkan ke keranjang.', false);
+                }
                 return;
             }
 
-            const cocok = this.filteredProducts;
+            const cocok = this.allFilteredProducts;
 
             if (cocok.length === 1) {
                 this.search = '';
@@ -2525,7 +2749,7 @@ function kasirApp() {
                     body: JSON.stringify({
                         customer_id: this.customerId || null,
                         items: this.cart.map(i => ({ product_id: i.product_id, qty: i.qty, unit_type: i.unit_type })),
-                        discount: this.discount || 0,
+                        discount: Math.max(0, (Number(this.discount) || 0) - (this.usePointsVoucher ? (this.voucherDiscountApplied || 0) : 0)),
                         paid_amount: 0,
                         payment_method: this.paymentMethod || 'tunai',
                         is_parked: true,
@@ -2545,6 +2769,8 @@ function kasirApp() {
                 // 2. Kosongkan keranjang kasir untuk melayani pelanggan berikutnya
                 this.cart = [];
                 this.discount = 0;
+                this.usePointsVoucher = false;
+                this.voucherDiscountApplied = 0;
                 this.paidAmount = 0;
                 this.customerId = '';
                 this.isWaitingList = false;
@@ -2599,6 +2825,7 @@ function kasirApp() {
                         customer_id: this.customerId || null,
                         items: this.cart.map(i => ({ product_id: i.product_id, qty: i.qty, unit_type: i.unit_type })),
                         discount: this.discount || 0,
+                        use_points_voucher: Boolean(this.usePointsVoucher),
                         paid_amount: this.paidAmount || 0,
                         payment_method: this.paymentMethod,
                         is_waiting_list: this.isWaitingList,
@@ -2628,6 +2855,8 @@ function kasirApp() {
                 this.hapusDraf();
                 this.cart = [];
                 this.discount = 0;
+                this.usePointsVoucher = false;
+                this.voucherDiscountApplied = 0;
                 this.paidAmount = 0;
                 this.customerId = '';
                 this.isWaitingList = false;

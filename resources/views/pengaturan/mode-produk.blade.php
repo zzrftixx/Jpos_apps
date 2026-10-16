@@ -32,8 +32,18 @@
              berarti satu kunci izin baru dan satu tempat lagi yang harus dicari orang -
              untuk satu centang. Kalau nanti centang seperti ini bertambah, halaman ini yang
              berganti nama, bukan bertambah saudara. --}}
-        <div class="border-t border-slate-200 pt-4 mt-4">
+        <div class="border-t border-slate-200 pt-4 mt-4 space-y-3">
             <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Fitur Lanjutan</div>
+            <label class="flex items-start gap-3 border rounded-lg px-4 py-3 cursor-pointer hover:bg-slate-50">
+                <input type="checkbox" name="harga_kategori_pelanggan" value="1" class="mt-1" {{ ($settings['harga_kategori_pelanggan'] ?? true) ? 'checked' : '' }}>
+                <span>
+                    <span class="block font-medium text-sm">🏷️ Harga Jual per Kategori Pelanggan (UMUM, Reseller, Grosir)</span>
+                    <span class="block text-xs text-slate-400 mt-0.5">
+                        Menampilkan kolom <strong>Harga Reseller</strong> dan <strong>Harga Grosir</strong> secara otomatis di form Tambah/Edit Produk. Kasir otomatis menyesuaikan harga saat pelanggan kategori Reseller atau Grosir dipilih.
+                    </span>
+                    <span class="block text-xs text-slate-400 mt-1">Jika dimatikan, form produk baru hanya menampilkan satu kolom Harga Jual biasa (namun tetap bisa diaktifkan kapan saja langsung lewat saklar di dalam form produk).</span>
+                </span>
+            </label>
             <label class="flex items-start gap-3 border rounded-lg px-4 py-3 cursor-pointer hover:bg-slate-50">
                 <input type="checkbox" name="grosir_jasa" value="1" class="mt-1" {{ ($settings['grosir_jasa'] ?? false) ? 'checked' : '' }}>
                 <span>

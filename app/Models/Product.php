@@ -112,7 +112,12 @@ class Product extends Model
      *        tidak diberikan, satu query dijalankan di sini. Untuk katalog 2.000 produk,
      *        selisihnya 1 query lawan 2.000.
      */
-    public function toCartArray(?array $petaSatuanTimbangan = null, ?array $petaLokasiRak = null): array
+    public function promotionItems(): HasMany
+    {
+        return $this->hasMany(PromotionItem::class);
+    }
+
+    public function toCartArray(?array $petaSatuanTimbangan = null, ?array $petaLokasiRak = null, ?array $petaPromo = null): array
     {
         $bolehPecahan = $petaSatuanTimbangan !== null
             ? ($petaSatuanTimbangan[$this->unit] ?? false)
@@ -124,6 +129,16 @@ class Product extends Model
         $lokasiRak = $petaLokasiRak !== null
             ? ($petaLokasiRak[$this->id] ?? null)
             : $this->lokasiRak();
+
+        $promo = $petaPromo !== null ? ($petaPromo[$this->id] ?? null) : null;
+        $promoPrice = null;
+        $promoName = null;
+        $promoBarcode = null;
+        if ($promo) {
+            $promoPrice = (float) (is_array($promo) ? ($promo['promo_price'] ?? 0) : ($promo->promo_price ?? 0));
+            $promoName = (string) (is_array($promo) ? ($promo['promo_name'] ?? '') : ($promo->promo_name ?? ''));
+            $promoBarcode = (string) (is_array($promo) ? ($promo['promo_barcode'] ?? '') : ($promo->promo_barcode ?? ''));
+        }
 
         return [
             'id' => $this->id,
@@ -152,6 +167,10 @@ class Product extends Model
             // Ditanam ke katalog supaya kasir bisa menjawab "ada di mana?" tanpa mencari ke
             // belakang. null berarti produk itu belum ditaruh di planogram mana pun.
             'rack_location' => $lokasiRak,
+            'promo_active' => $promo !== null,
+            'promo_price' => $promoPrice,
+            'promo_name' => $promoName,
+            'promo_barcode' => $promoBarcode,
         ];
     }
 

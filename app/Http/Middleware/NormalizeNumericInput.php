@@ -47,7 +47,7 @@ class NormalizeNumericInput
         'units.*.wholesale_price',
         'units.*.wholesale_min_qty',
 
-        // Transaksi
+        // Transaksi & Promo
         'discount',
         'paid_amount',
         'additional_payment',
@@ -55,19 +55,23 @@ class NormalizeNumericInput
         'items.*.qty',
         'items.*.price',
         'items.*.sell_price',
+        'items.*.promo_price',
         'add_items.*.qty',
         'qty',
         'other_cost',
         'other_unit_prices.*.sell_price',
         'other_unit_prices.*.cost_price',
 
-        // Pengaturan
+        // Pengaturan & Poin Loyalitas
         'percent',
         'label_width',
         'label_height',
         'custom_width',
         'margin',
         'font_size',
+        'belanja_per_poin',
+        'target_poin',
+        'nilai_voucher',
 
         // Shift Kasir
         'starting_cash',

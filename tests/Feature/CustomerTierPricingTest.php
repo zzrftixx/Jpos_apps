@@ -331,4 +331,46 @@ class CustomerTierPricingTest extends JposTestCase
         $this->assertNotNull($addedItem);
         $this->assertEquals(13000, (float) $addedItem->price, 'Barang pengganti retur harus menggunakan harga tier pelanggan');
     }
+
+    public function test_toggle_harga_kategori_pelanggan_dapat_diaktifkan_dan_dinonaktifkan(): void
+    {
+        // 1. Pengaturan Mode Produk dapat mematikan & menyalakan harga_kategori_pelanggan
+        $this->actingAs($this->admin)->post('/pengaturan/mode-produk', [
+            'mode' => 'sederhana',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertFalse(\App\Models\Setting::get('produk_mode', [])['harga_kategori_pelanggan'] ?? true);
+
+        $htmlOff = $this->actingAs($this->admin)->get('/master/produk')->assertOk()->getContent();
+        $this->assertStringContainsString('tierPricingEnabled: false', $htmlOff);
+
+        $this->actingAs($this->admin)->post('/pengaturan/mode-produk', [
+            'mode' => 'sederhana',
+            'harga_kategori_pelanggan' => '1',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertTrue(\App\Models\Setting::get('produk_mode', [])['harga_kategori_pelanggan'] ?? false);
+
+        $htmlOn = $this->actingAs($this->admin)->get('/master/produk')->assertOk()->getContent();
+        $this->assertStringContainsString('tierPricingEnabled: true', $htmlOn);
+
+        // 2. Jika saklar tier_pricing_enabled = 0 di form produk, reseller_price & grosir_price dinolkan/dikosongkan di server
+        $this->actingAs($this->admin)->post('/master/produk', [
+            'name' => 'Produk Tanpa Tier',
+            'type' => 'barang',
+            'unit' => 'Pcs',
+            'cost_price' => '10.000',
+            'sell_price' => '15.000',
+            'reseller_price' => '14.000',
+            'grosir_price' => '13.000',
+            'tier_pricing_enabled' => '0',
+            'stock' => 20,
+            'is_active' => 1,
+        ])->assertSessionHasNoErrors();
+
+        $produk = Product::where('name', 'Produk Tanpa Tier')->firstOrFail();
+        $this->assertEquals(15000, (float) $produk->sell_price);
+        $this->assertNull($produk->reseller_price);
+        $this->assertNull($produk->grosir_price);
+    }
 }
