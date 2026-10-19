@@ -27,6 +27,11 @@ Aplikasi Point of Sale (POS) modern, cepat, dan handal berbasis **Laravel 13 + S
   - Standby Launcher otomatis di sistem tray Windows untuk mencegah background freeze.
   - Manajemen Shift Kasir dan audit saldo awal/akhir laci kasir.
 
+- **Ekosistem Kasir Tambahan (Android Tablet & Multi-Device LAN):**
+  - Antarmuka khusus tablet kasir (*Tablet Offline POS*) berbasis PWA di `/tablet` dengan penyimpanan lokal IndexedDB.
+  - Aplikasi pembungkus Android Kiosk Native (`android/`) dengan fitur cetak Bluetooth ESC/POS.
+  - Sinkronisasi transaksi offline aman via token kriptografis LAN (`X-JPOS-TABLET-TOKEN`).
+
 ---
 
 ## 🛠️ Panduan Pengembangan (Developer Quickstart)
@@ -101,7 +106,8 @@ Berikut adalah catatan pembaruan fitur, optimasi, dan pemeliharaan aplikasi JPos
 
 | Versi | Tanggal | Modul / Area | Deskripsi Pembaruan | Fungsi & Manfaat |
 | :--- | :--- | :--- | :--- | :--- |
-| **2.14.3** | 17 Okt 2026 | Manajemen Pengguna | Toggle visibilitas password (ikon mata) pada modal pengguna | Mempermudah verifikasi dan input kata sandi user oleh administrator |
+| **2.15.0** | 19 Okt 2026 | Android & Tablet POS | Integrasi Ekosistem Tablet Offline-First PWA, Kiosk Sync, & Token Pengaman LAN | Mendukung kasir tambahan mobile (tablet Android/iPad) dengan sinkronisasi lokal aman |
+| **2.14.3** | 19 Okt 2026 | Hardware & Scanner | Dukungan Barcode Scanner berakhiran Tab/Enter & Standby Tray | Menjamin pembacaan akurat scanner fisik tanpa salah input nominal bayar |
 | **2.14.2** | 13 Okt 2026 | Modul Kasir & Barcode | Slicing DOM 60 kartu & Hash Map $O(1)$ Barcode Index | Akselerasi kasir responsif bebas lag untuk katalog besar (>1.800 produk) |
 | **2.14.1** | 13 Okt 2026 | Master Produk & Pengaturan | Sakelar fleksibel harga kategori pelanggan & normalisasi input | Memberikan opsi aktivasi harga reseller/grosir sesuai jenis toko |
 | **2.14.0** | 12 Okt 2026 | Promo & Pelanggan | Modul Promo Diskon Barcode & Poin Loyalitas Pelanggan | Meningkatkan retensi pelanggan lewat poin belanja dan voucher |

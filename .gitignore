@@ -61,8 +61,14 @@
 # seluruh struktur proyek — dibangun ulang dari kode kalau diperlukan.
 /graphify-out/
 
-# Paket hasil build (.exe/.zip untuk client) — artefak, bukan sumber
-/dist
+# Paket hasil build (.exe & .zip rilis untuk client).
+/dist/*
+!/dist/*.zip
+!/dist/*.exe
+!/dist/*.bat
+!/dist/*.txt
+/dist/build/
+/dist/KASIR CLIENT PETSHOP/
 
 
 # =====================================================================
