@@ -201,4 +201,18 @@ class TabletSyncApiTest extends JposTestCase
         $response->assertStatus(403)
             ->assertJson(['success' => false]);
     }
+
+    public function test_api_katalog_mendukung_etag_dan_304_not_modified(): void
+    {
+        $response1 = $this->getJson('/api/tablet/katalog');
+        $response1->assertOk();
+        $this->assertTrue($response1->headers->has('ETag'));
+
+        $etag = $response1->headers->get('ETag');
+        $this->assertNotEmpty($etag);
+
+        $response2 = $this->withHeader('If-None-Match', $etag)->getJson('/api/tablet/katalog');
+        $response2->assertStatus(304);
+    }
 }
+

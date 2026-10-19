@@ -66,9 +66,15 @@ class TabletSyncController extends Controller
             'name' => 'PPN',
         ]);
 
+        $etag = '"ktlg-' . md5((string) Product::max('updated_at') . '-' . Product::count() . '-' . Customer::count()) . '"';
+        if (request()->header('If-None-Match') === $etag) {
+            return response()->json(null, 304, ['ETag' => $etag]);
+        }
+
         $categories = Category::select('id', 'name')->orderBy('name')->get();
 
-        $products = Product::with(['units.unit', 'category'])
+        $products = Product::select('id', 'name', 'barcode', 'sku', 'category_id', 'sell_price', 'stock', 'unit', 'type', 'image')
+            ->with(['units:id,product_id,unit_id,conversion,price,barcode', 'units.unit:id,name'])
             ->where('is_active', true)
             ->orderBy('name')
             ->get()
@@ -109,7 +115,7 @@ class TabletSyncController extends Controller
             'categories' => $categories,
             'customers' => $customers,
             'products' => $products,
-        ]);
+        ], 200, ['ETag' => $etag]);
     }
 
     /**

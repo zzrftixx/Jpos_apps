@@ -122,13 +122,13 @@
                     Nama Domain Kustom (DNS Lokal Toko)
                 </h2>
                 <p class="text-xs text-slate-600 mt-0.5">
-                    Gunakan nama domain toko Anda sendiri agar staf kasir tidak perlu menghafal dan mengetik deretan angka IP.
+                    Gunakan nama domain toko Anda sendiri agar staf kasir tidak perlu menghafal deretan angka IP.
                 </p>
             </div>
             @if($customDomain)
                 <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700 border border-blue-200 shrink-0">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                    Aktif: {{ $customDomain }}
+                    Domain Aktif: {{ $customDomain }}
                 </span>
             @endif
         </div>
@@ -151,7 +151,7 @@
                                placeholder="contoh: kasir.toko atau pos.lan"
                                class="flex-1 px-3 py-2 text-sm font-semibold text-slate-800 placeholder-slate-400 border-0 focus:ring-0 focus:outline-none">
                         @if($port != 80)
-                            <span class="inline-flex items-center px-3 text-xs font-mono text-slate-400 bg-slate-50 border-l border-slate-200 select-none">
+                            <span class="inline-flex items-center px-3 text-xs font-mono font-bold text-amber-700 bg-amber-50 border-l border-amber-200 select-none" title="Port aktif server JPos">
                                 :{{ $port }}
                             </span>
                         @endif
@@ -164,6 +164,18 @@
                 @error('custom_domain')
                     <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                 @enderror
+            </div>
+
+            {{-- LIVE PREVIEW URL LENGKAP --}}
+            <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="text-slate-500 font-medium">Pratinjau Alamat Lengkap:</span>
+                    <span class="font-mono font-bold text-brand-700" x-text="'http://' + (domainInput ? domainInput.trim() : 'kasir.toko') + ':{{ $port }}'"></span>
+                </div>
+                <div class="flex items-center gap-2 text-[10px]">
+                    <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-bold" x-text="'Domain: ' + (domainInput ? domainInput.trim() : 'kasir.toko')"></span>
+                    <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">Port: :{{ $port }}</span>
+                </div>
             </div>
 
             <div class="flex flex-wrap items-center gap-2 pt-1">
@@ -194,113 +206,175 @@
         </form>
     </div>
 
-    {{-- KARTU ALAMAT URL SERVER --}}
-    <div class="card p-5 space-y-4">
-        <div>
-            <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                <svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
-                Alamat URL Akses untuk Komputer Kasir Lain / HP / Tablet
-            </h2>
-            <p class="text-xs text-slate-600 mt-1">
-                Perangkat kasir tambahan <strong>TIDAK PERLU menginstal aplikasi apa pun</strong> (Zero-Install). Cukup buka Google Chrome atau Microsoft Edge di perangkat tersebut dan ketik alamat di bawah ini:
-            </p>
+    {{-- KARTU ALAMAT URL SERVER (HERO CARD TERSTRUKTUR & JELAS) --}}
+    @php
+        $heroUrl = $customDomainUrl ?: ($primaryIp ? "http://{$primaryIp}:{$port}" : "http://localhost:{$port}");
+        $heroHost = $customDomain ?: ($primaryIp ?: 'localhost');
+    @endphp
+    <div class="card p-5 space-y-4" x-data="{ heroDisalin: false }">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div>
+                <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <svg class="w-4 h-4 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                    Alamat URL Akses untuk Komputer Kasir Lain / HP / Tablet
+                </h2>
+                <p class="text-xs text-slate-600 mt-0.5">
+                    Ketik alamat di bawah ini pada browser Google Chrome / Microsoft Edge di perangkat kasir tambahan Anda.
+                </p>
+            </div>
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-green-100 text-green-700 border border-green-200 shrink-0">
+                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                Port Server: {{ $port }}
+            </span>
         </div>
 
-        <div class="space-y-2.5">
-            {{-- 1. URL DOMAIN KUSTOM (JIKA SUDAH DISIMPAN) --}}
-            @if($customDomainUrl)
-                <div class="p-4 rounded-xl border-2 border-brand-500 bg-brand-50/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
-                     x-data="{ disalin: false }">
-                    <div class="space-y-1 min-w-0">
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <span class="font-mono text-base font-bold text-brand-700 tracking-tight">{{ $customDomainUrl }}</span>
-                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-600 text-white uppercase tracking-wider">🌟 Domain Pilihan Anda</span>
-                        </div>
-                        <p class="text-[11px] text-slate-600">
-                            Akan diarahkan ke IP Server Toko: <code class="font-mono font-bold text-slate-800">{{ $primaryIp }}</code>
-                        </p>
-                    </div>
+        {{-- 1. HERO BOX ALAMAT LENGKAP --}}
+        <div class="p-4 rounded-2xl border-2 border-brand-500 bg-gradient-to-br from-brand-50/40 via-white to-blue-50/20 shadow-xs space-y-3">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+                <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    🌟 Alamat Lengkap yang Diketik di Browser:
+                </span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold {{ $customDomainUrl ? 'bg-brand-600 text-white' : 'bg-blue-600 text-white' }}">
+                    {{ $customDomainUrl ? 'Domain Pilihan Anda' : 'Alamat IP Otomatis' }}
+                </span>
+            </div>
 
-                    <div class="flex items-center gap-2 shrink-0">
-                        <a href="{{ $customDomainUrl }}" target="_blank" rel="noopener"
-                           class="btn btn-xs bg-white hover:bg-slate-100 text-brand-700 border border-brand-200 px-3 py-1.5 rounded-lg font-semibold transition">
-                            Buka ↗
-                        </a>
-                        <button type="button"
-                                @click="navigator.clipboard.writeText('{{ $customDomainUrl }}'); disalin = true; setTimeout(() => disalin = false, 2000)"
-                                class="btn btn-xs border px-3 py-1.5 rounded-lg font-semibold transition shadow-2xs"
-                                :class="disalin ? 'bg-green-600 text-white border-green-600' : 'bg-brand-600 hover:bg-brand-700 text-white border-brand-600'">
-                            <span x-text="disalin ? '✓ Tersalin' : 'Salin URL'">Salin URL</span>
-                        </button>
-                    </div>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-white border border-brand-200 shadow-2xs">
+                <div class="font-mono text-base sm:text-lg font-extrabold text-brand-700 select-all tracking-tight break-all">
+                    {{ $heroUrl }}
                 </div>
-
-                {{-- BANTUAN BILA SERVER NOT FOUND --}}
-                <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
-                    <svg class="w-4 h-4 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                    <div class="space-y-1 text-[11px] leading-relaxed">
-                        <p class="font-bold text-amber-900">
-                            Muncul pesan <em>"Can't find the server"</em> atau <em>"Tidak dapat tersambung"</em> saat membuka domain di atas?
-                        </p>
-                        <p class="text-amber-800">
-                            Domain lokal (seperti <code class="font-mono font-bold">{{ $customDomain }}</code>) tidak terdaftar di internet publik. Agar browser di komputer/laptop Anda dapat mengenalinya, jalankan <strong>perintah 1-baris pada bagian Petunjuk di bawah</strong> (atau gunakan alamat <strong>⚡ Otomatis .local</strong> yang langsung berfungsi tanpa konfigurasi apa pun).
-                        </p>
-                    </div>
-                </div>
-            @endif
-
-            {{-- 2. URL MDNS BAWAAN (.LOCAL) --}}
-            <div class="p-3.5 rounded-xl border border-blue-200 bg-blue-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                 x-data="{ disalin: false }">
-                <div class="space-y-1 min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <span class="font-mono text-sm font-bold text-blue-800">{{ $mdnsUrl }}</span>
-                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">⚡ Otomatis (mDNS .local)</span>
-                    </div>
-                    <p class="text-[11px] text-slate-600">
-                        Standar bawaan tanpa perlu edit file hosts atau setting router. Didukung langsung oleh Windows 10/11, iOS, iPad, Mac, dan Android modern.
-                    </p>
-                </div>
-
                 <div class="flex items-center gap-2 shrink-0">
-                    <a href="{{ $mdnsUrl }}" target="_blank" rel="noopener"
-                       class="btn btn-xs bg-white hover:bg-slate-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg font-semibold transition">
+                    <a href="{{ $heroUrl }}" target="_blank" rel="noopener"
+                       class="btn btn-xs bg-white hover:bg-slate-100 text-brand-700 border border-brand-200 px-3.5 py-2 rounded-xl font-bold transition shadow-2xs">
                         Buka ↗
                     </a>
                     <button type="button"
-                            @click="navigator.clipboard.writeText('{{ $mdnsUrl }}'); disalin = true; setTimeout(() => disalin = false, 2000)"
-                            class="btn btn-xs border px-3 py-1.5 rounded-lg font-semibold transition"
-                            :class="disalin ? 'bg-green-600 text-white border-green-600' : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'">
-                        <span x-text="disalin ? '✓ Tersalin' : 'Salin URL'">Salin URL</span>
+                            @click="navigator.clipboard.writeText('{{ $heroUrl }}'); heroDisalin = true; setTimeout(() => heroDisalin = false, 2000)"
+                            class="btn btn-xs px-4 py-2 rounded-xl font-bold transition shadow-2xs border"
+                            :class="heroDisalin ? 'bg-green-600 text-white border-green-600' : 'bg-brand-600 hover:bg-brand-700 text-white border-brand-600'">
+                        <span x-text="heroDisalin ? '✓ Tersalin' : 'Salin URL Lengkap'">Salin URL Lengkap</span>
                     </button>
                 </div>
             </div>
 
-            {{-- 3. URL BERBASIS ALAMAT IP --}}
-            @foreach($urls as $u)
-                <div class="flex items-center justify-between p-3 rounded-xl border {{ $u['is_recommended'] ? 'bg-blue-50/50 border-blue-200' : 'bg-slate-50 border-slate-200' }}"
-                     x-data="{ disalin: false }">
-                    <div class="space-y-0.5">
-                        <div class="flex items-center gap-2">
-                            <span class="font-mono text-sm font-bold {{ $u['is_recommended'] ? 'text-blue-700' : 'text-slate-700' }}">{{ $u['url'] }}</span>
-                            @if($u['is_recommended'])
-                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">IP LAN Utama</span>
-                            @endif
-                        </div>
-                        <p class="text-[11px] text-slate-500">Antarmuka Jaringan: {{ $u['ip'] }}</p>
+            {{-- RINCIAN KOMPONEN ALAMAT: DOMAIN VS PORT --}}
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                <div class="p-2.5 rounded-xl bg-blue-50/70 border border-blue-200 text-left">
+                    <div class="text-[10px] font-bold uppercase tracking-wider text-blue-600">🏷️ Bagian Nama Domain / Host</div>
+                    <div class="font-mono text-xs font-bold text-blue-900 mt-0.5 truncate select-all">
+                        {{ $heroHost }}
                     </div>
-
-                    <button type="button"
-                            @click="navigator.clipboard.writeText('{{ $u['url'] }}'); disalin = true; setTimeout(() => disalin = false, 2000)"
-                            class="btn btn-xs border px-3 py-1.5 rounded-lg font-semibold transition"
-                            :class="disalin ? 'bg-green-600 text-white border-green-600' : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'">
-                        <span x-text="disalin ? '✓ Tersalin' : 'Salin URL'">Salin URL</span>
-                    </button>
+                    <div class="text-[10px] text-blue-700/80 mt-0.5">Nama tujuan alamat server</div>
                 </div>
-            @endforeach
+
+                <div class="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 text-left">
+                    <div class="text-[10px] font-bold uppercase tracking-wider text-amber-700">🔌 Bagian Nomor Port</div>
+                    <div class="font-mono text-xs font-bold text-amber-900 mt-0.5 select-all">
+                        :{{ $port }}
+                    </div>
+                    <div class="text-[10px] text-amber-800/80 mt-0.5">Pintu koneksi server JPos</div>
+                </div>
+
+                <div class="p-2.5 rounded-xl bg-slate-100 border border-slate-200 text-left">
+                    <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">🌐 Protokol Web</div>
+                    <div class="font-mono text-xs font-bold text-slate-800 mt-0.5">
+                        http://
+                    </div>
+                    <div class="text-[10px] text-slate-600 mt-0.5">Jaringan lokal tanpa internet</div>
+                </div>
+            </div>
+
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 leading-relaxed">
+                💡 <strong>Catatan Penting Nomor Port (:{{ $port }}):</strong> Angka <code class="font-mono font-bold text-amber-800 bg-amber-100/70 px-1 py-0.5 rounded">:{{ $port }}</code> di belakang nama domain adalah nomor port server JPos di komputer ini. <strong>Jangan dihilangkan!</strong> Saat mengetik di Chrome HP/Tablet, selalu sertakan port tersebut secara lengkap: <code class="font-mono font-bold text-brand-700">{{ $heroUrl }}</code>.
+            </div>
         </div>
+
+        {{-- 2. OPSI INSTAN TANPA SETTING (ALAMAT IP LANGSUNG) --}}
+        @if($customDomainUrl && $primaryIp)
+            <div class="p-3.5 rounded-xl bg-gradient-to-r from-blue-50/60 to-slate-50 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                 x-data="{ ipDisalin: false }">
+                <div class="space-y-0.5">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-slate-800">⚡ Opsi Instan Tanpa Setting (Alamat IP Langsung):</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 border border-green-200">Langsung Terbuka</span>
+                    </div>
+                    <p class="text-[11px] text-slate-600">
+                        Jika HP / Tablet belum disetting domain, cukup ketik IP ini: <code class="font-mono font-bold text-blue-700 bg-white px-1.5 py-0.5 rounded border border-blue-200 select-all">http://{{ $primaryIp }}:{{ $port }}</code>
+                    </p>
+                </div>
+                <button type="button"
+                        @click="navigator.clipboard.writeText('http://{{ $primaryIp }}:{{ $port }}'); ipDisalin = true; setTimeout(() => ipDisalin = false, 2000)"
+                        class="btn btn-xs border px-3 py-1.5 rounded-lg font-semibold shrink-0"
+                        :class="ipDisalin ? 'bg-green-600 text-white border-green-600' : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'">
+                    <span x-text="ipDisalin ? '✓ IP Tersalin' : 'Salin Alamat IP'">Salin Alamat IP</span>
+                </button>
+            </div>
+        @endif
+
+        {{-- 3. PILIHAN ALAMAT ALTERNATIF (MDNS & DAFTAR IP) DALAM ACCORDION RINGKAS --}}
+        <details class="group border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+            <summary class="p-3 cursor-pointer text-xs font-bold text-slate-700 flex items-center justify-between hover:bg-slate-100/80 transition select-none">
+                <span class="flex items-center gap-2">
+                    <svg class="w-4 h-4 text-slate-500 group-open:rotate-90 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                    Lihat Pilihan Alamat Alternatif (mDNS .local &amp; Daftar Semua IP Antarmuka)
+                </span>
+                <span class="text-[10px] font-semibold text-slate-500 group-open:hidden">Klik untuk melihat ▾</span>
+            </summary>
+            <div class="p-4 pt-2 border-t border-slate-200 space-y-3 bg-white">
+                {{-- URL mDNS .local --}}
+                <div class="p-3 rounded-xl border border-blue-200 bg-blue-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                     x-data="{ mdnsCopied: false }">
+                    <div class="space-y-0.5 min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-mono text-sm font-bold text-blue-800">{{ $mdnsUrl }}</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">⚡ Otomatis (mDNS .local)</span>
+                        </div>
+                        <p class="text-[11px] text-slate-600">
+                            Didukung langsung oleh Windows 10/11, iPad, iPhone, Mac, dan sebagian besar Android tanpa edit hosts/router.
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <a href="{{ $mdnsUrl }}" target="_blank" rel="noopener"
+                           class="btn btn-xs bg-white hover:bg-slate-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg font-semibold transition">
+                            Buka ↗
+                        </a>
+                        <button type="button"
+                                @click="navigator.clipboard.writeText('{{ $mdnsUrl }}'); mdnsCopied = true; setTimeout(() => mdnsCopied = false, 2000)"
+                                class="btn btn-xs border px-3 py-1.5 rounded-lg font-semibold transition"
+                                :class="mdnsCopied ? 'bg-green-600 text-white border-green-600' : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'">
+                            <span x-text="mdnsCopied ? '✓ Tersalin' : 'Salin URL'">Salin URL</span>
+                        </button>
+                    </div>
+                </div>
+
+                {{-- Seluruh Antarmuka IP --}}
+                <div class="space-y-2">
+                    <span class="text-xs font-semibold text-slate-700">Daftar Lengkap Alamat IP LAN:</span>
+                    @foreach($urls as $u)
+                        <div class="flex items-center justify-between p-2.5 rounded-xl border {{ $u['is_recommended'] ? 'bg-blue-50/50 border-blue-200' : 'bg-slate-50 border-slate-200' }}"
+                             x-data="{ ipItemCopied: false }">
+                            <div class="space-y-0.5">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-mono text-xs font-bold {{ $u['is_recommended'] ? 'text-blue-700' : 'text-slate-700' }}">{{ $u['url'] }}</span>
+                                    @if($u['is_recommended'])
+                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">IP LAN Utama</span>
+                                    @endif
+                                </div>
+                                <p class="text-[10px] text-slate-500">Antarmuka: {{ $u['ip'] }}</p>
+                            </div>
+                            <button type="button"
+                                    @click="navigator.clipboard.writeText('{{ $u['url'] }}'); ipItemCopied = true; setTimeout(() => ipItemCopied = false, 2000)"
+                                    class="btn btn-xs border px-2.5 py-1 rounded-lg text-xs font-semibold transition"
+                                    :class="ipItemCopied ? 'bg-green-600 text-white border-green-600' : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'">
+                                <span x-text="ipItemCopied ? '✓' : 'Salin'">Salin</span>
+                            </button>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </details>
     </div>
 
     {{-- PANDUAN MENGHUBUNGKAN DOMAIN KUSTOM --}}

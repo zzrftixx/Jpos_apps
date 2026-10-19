@@ -36,6 +36,14 @@ $berkas = $publik . $uri;
 $asli = $uri !== '/' && $uri !== '' ? realpath($berkas) : false;
 $akarPublik = realpath($publik);
 
+// Dukung berkas index.html di dalam subdirektori (contoh: /tablet atau /tablet/)
+if ($asli !== false && is_dir($asli)) {
+    $indexFile = rtrim($asli, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'index.html';
+    if (is_file($indexFile)) {
+        $asli = realpath($indexFile);
+    }
+}
+
 $bolehDilayani = $asli !== false
     && $akarPublik !== false
     && is_file($asli)
@@ -48,10 +56,13 @@ if (! $bolehDilayani) {
 }
 
 $tipe = [
-    'css' => 'text/css',
-    'js' => 'application/javascript',
-    'mjs' => 'application/javascript',
+    'html' => 'text/html; charset=UTF-8',
+    'htm' => 'text/html; charset=UTF-8',
+    'css' => 'text/css; charset=UTF-8',
+    'js' => 'application/javascript; charset=UTF-8',
+    'mjs' => 'application/javascript; charset=UTF-8',
     'json' => 'application/json',
+    'webmanifest' => 'application/manifest+json',
     'png' => 'image/png',
     'jpg' => 'image/jpeg',
     'jpeg' => 'image/jpeg',
@@ -64,7 +75,7 @@ $tipe = [
     'ttf' => 'font/ttf',
     'eot' => 'application/vnd.ms-fontobject',
     'map' => 'application/json',
-    'txt' => 'text/plain',
+    'txt' => 'text/plain; charset=UTF-8',
     'pdf' => 'application/pdf',
 ];
 
@@ -102,6 +113,31 @@ if ($masihSegar) {
     http_response_code(304);
 
     return;
+}
+
+// Kompresi Gzip untuk teks/CSS/JS/JSON/HTML/SVG bila peramban/klien mendukung
+$dukungGzip = function_exists('gzencode')
+    && isset($_SERVER['HTTP_ACCEPT_ENCODING'])
+    && str_contains($_SERVER['HTTP_ACCEPT_ENCODING'], 'gzip');
+
+$kompresibel = in_array($ekstensi, ['css', 'js', 'mjs', 'json', 'html', 'htm', 'svg', 'map', 'txt', 'webmanifest'], true);
+
+if ($dukungGzip && $kompresibel && $ukuran > 512) {
+    $kontenMentah = file_get_contents($asli);
+    if ($kontenMentah !== false) {
+        $kontenGzip = gzencode($kontenMentah, 6);
+        if ($kontenGzip !== false && strlen($kontenGzip) < $ukuran) {
+            header('Content-Encoding: gzip');
+            header('Vary: Accept-Encoding');
+            header('Content-Length: ' . strlen($kontenGzip));
+
+            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'HEAD') {
+                echo $kontenGzip;
+            }
+
+            return;
+        }
+    }
 }
 
 header('Content-Length: ' . $ukuran);
