@@ -15,6 +15,19 @@
     </form>
 </div>
 
+<div class="card p-6 mb-4 border border-blue-200 bg-blue-50/20">
+    <h3 class="font-semibold mb-1 text-slate-800">⚖️ Sinkronisasi & Perbaiki HPP Laporan</h3>
+    <p class="text-sm text-slate-600 mb-3">
+        Memperbaiki dan menyeimbangkan nilai HPP (Harga Pokok Penjualan) pada laporan laba rugi akibat kesalahan input harga modal produk multi-satuan/renteng (misal harga modal 1 karung/dus terisi ke satuan dasar kg/pcs).
+    </p>
+    <form method="POST" action="{{ route('pengaturan.database.perbaiki-hpp') }}" onsubmit="return confirm('Jalankan perbaikan HPP untuk menyeimbangkan laporan?')">
+        @csrf
+        <button type="submit" class="btn btn-primary">
+            Perbaiki & Seimbangkan HPP Sekarang
+        </button>
+    </form>
+</div>
+
 <div class="card p-6 mb-4">
     <h3 class="font-semibold mb-3">Jumlah Data per Tabel</h3>
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">

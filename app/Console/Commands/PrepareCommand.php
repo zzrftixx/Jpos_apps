@@ -113,12 +113,18 @@ class PrepareCommand extends Command
             $this->warn('Tidak bisa memperbarui kunci keamanan via artisan: ' . $e->getMessage());
         }
 
-        // Jaring pengaman: jika artisan gagal menulis ke .env (mis. karena regex mismatch atau cached config),
-        // tulis langsung 32-byte key acak ke .env
+        // Jaring pengaman: sinkronkan config in-memory dengan .env, dan jika artisan gagal menulis ke .env
+        // (mis. karena regex mismatch, file lock, atau cached config), tulis langsung 32-byte key acak ke .env
         $envPath = base_path('.env');
         if (File::exists($envPath)) {
             $isiEnv = File::get($envPath);
-            if (! preg_match('/^APP_KEY=base64:[A-Za-z0-9+\/]{43}=/m', $isiEnv)) {
+            if (preg_match('/^APP_KEY=(base64:[A-Za-z0-9+\/]{43}=)/m', $isiEnv, $matches)) {
+                if ($matches[1] !== $kunciBawaanLama) {
+                    config(['app.key' => $matches[1]]);
+                }
+            }
+
+            if (! preg_match('/^APP_KEY=base64:[A-Za-z0-9+\/]{43}=/m', $isiEnv) || str_contains($isiEnv, 'APP_KEY=' . $kunciBawaanLama)) {
                 $kunciBaru = 'base64:' . base64_encode(random_bytes(32));
                 if (preg_match('/^APP_KEY=.*/m', $isiEnv)) {
                     $isiEnv = preg_replace('/^APP_KEY=.*/m', 'APP_KEY=' . $kunciBaru, $isiEnv);

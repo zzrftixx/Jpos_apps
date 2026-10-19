@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>JPOS Tablet Kasir (Offline Edition)</title>
+
+    <link rel="manifest" href="/tablet/manifest.json">
+    <link rel="icon" type="image/png" href="/images/logo-jpos.png">
+
+    <!-- CSS & JS Vendor Lokal (100% Offline Tanpa Butuh Internet) -->
+    <link rel="stylesheet" href="/vendor/jpos.css">
+    <script src="/vendor/tailwind-play-3.4.17.js"></script>
+    <script defer src="/vendor/alpine-3.15.12.min.js"></script>
+    <script src="/tablet/app.js"></script>
+
+    <style>
+        [x-cloak] { display: none !important; }
+        /* Hilangkan highlight biru saat tombol disentuh di tablet */
+        * { -webkit-tap-highlight-color: transparent; }
+        /* Tampilan cetak struk */
+        @media print {
+            body * { visibility: hidden; }
+            #printable-receipt, #printable-receipt * { visibility: visible; }
+            #printable-receipt { position: absolute; left: 0; top: 0; width: 100%; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen overflow-hidden select-none font-sans" x-data="tabletKasir">
+
+    <!-- HEADER TOP BAR TABLET -->
+    <header class="h-14 bg-white border-b border-slate-200 px-3 sm:px-4 flex items-center justify-between shrink-0 shadow-2xs z-10">
+        <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <img src="/images/logo-jpos.png" alt="Logo" class="w-8 h-8 rounded-lg object-contain shrink-0">
+            <div class="min-w-0">
+                <h1 class="font-bold text-sm text-slate-900 leading-tight truncate max-w-[170px] sm:max-w-xs" x-text="storeProfile.name || 'JPOS Kasir Tablet'"></h1>
+                <p class="text-[11px] text-slate-500 flex items-center gap-1.5 truncate">
+                    <span class="w-2 h-2 rounded-full shrink-0" :class="isOnline ? 'bg-green-500 animate-pulse' : 'bg-amber-500'"></span>
+                    <span class="truncate" x-text="isOnline ? 'Terhubung Server' : 'Mode Offline'"></span>
+                    <span class="text-slate-300">•</span>
+                    <span class="font-semibold text-slate-600 truncate" x-text="cashierName"></span>
+                </p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <!-- Indikator Transaksi Belum Terkirim -->
+            <template x-if="unsyncedCount > 0">
+                <span class="px-2 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-bounce flex items-center gap-1">
+                    <span x-text="unsyncedCount"></span> <span class="hidden sm:inline">Offline</span>
+                </span>
+            </template>
+
+            <!-- Pesan Notifikasi Sinkron -->
+            <span x-show="syncMessage" x-text="syncMessage" class="text-xs font-semibold text-blue-600 px-1 hidden md:inline truncate max-w-[150px]"></span>
+
+            <!-- Tombol Sinkronisasi -->
+            <button type="button"
+                    @click="syncAll()"
+                    :disabled="isSyncing"
+                    class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200 border border-blue-200 text-xs font-bold flex items-center gap-1.5 transition">
+                <svg class="w-3.5 h-3.5" :class="isSyncing ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span class="hidden sm:inline" x-text="isSyncing ? 'Menyinkronkan...' : 'Sinkron Data'"></span>
+            </button>
+
+            <!-- Tombol Pengaturan -->
+            <button type="button"
+                    @click="showSettingsModal = true"
+                    class="p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 active:bg-slate-200 transition"
+                    title="Pengaturan Tablet">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- LAYOUT UTAMA: SPLIT VIEW (KATALOG KIRI, KERANJANG KANAN) -->
+    <main class="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+
+        <!-- KOLOM KIRI: KATALOG PRODUK & SEARCH -->
+        <section class="flex-1 flex flex-col bg-slate-50 border-r border-slate-200 overflow-hidden min-w-0">
+            <!-- Bar Pencarian & Kategori -->
+            <div class="p-3 bg-white border-b border-slate-200 space-y-2 shrink-0">
+                <div class="relative">
+                    <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input type="text"
+                           x-model="searchQuery"
+                           @input="filterProducts()"
+                           placeholder="Ketik nama barang atau scan barcode..."
+                           class="w-full pl-9 pr-4 py-2.5 bg-slate-100 rounded-xl text-sm font-semibold border-0 focus:ring-2 focus:ring-blue-500 focus:bg-white transition">
+                </div>
+
+                <!-- Chips Kategori -->
+                <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+                    <button type="button"
+                            @click="selectedCategory = 'all'; filterProducts()"
+                            class="px-3 py-1.5 rounded-lg font-bold shrink-0 transition active:scale-95"
+                            :class="selectedCategory === 'all' ? 'bg-blue-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+                        Semua (<span x-text="products.length"></span>)
+                    </button>
+                    <template x-for="cat in categories" :key="cat.id">
+                        <button type="button"
+                                @click="selectedCategory = cat.id; filterProducts()"
+                                class="px-3 py-1.5 rounded-lg font-semibold shrink-0 transition active:scale-95"
+                                :class="selectedCategory == cat.id ? 'bg-blue-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+                                x-text="cat.name">
+                        </button>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Grid Produk (Bisa di-scroll) -->
+            <div class="flex-1 overflow-y-auto p-3">
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+                    <template x-for="prod in filteredProducts" :key="prod.id">
+                        <div @click="addToCart(prod)"
+                             class="bg-white p-3 rounded-xl border border-slate-200/80 hover:border-blue-400 active:scale-95 shadow-2xs cursor-pointer flex flex-col justify-between transition group">
+                            <div>
+                                <div class="flex items-start justify-between gap-1 mb-1">
+                                    <span class="text-[10px] font-mono text-slate-400 truncate max-w-[90px]" x-text="prod.barcode || prod.sku"></span>
+                                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0"
+                                          :class="prod.is_jasa ? 'bg-purple-100 text-purple-700' : (prod.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')">
+                                        <span x-text="prod.is_jasa ? 'Jasa' : prod.stock + ' ' + (prod.unit || '')"></span>
+                                    </span>
+                                </div>
+                                <h3 class="font-bold text-xs text-slate-800 line-clamp-2 leading-snug group-hover:text-blue-600 transition" x-text="prod.name"></h3>
+                            </div>
+                            <div class="mt-2 pt-1 border-t border-slate-100 flex items-center justify-between">
+                                <span class="font-bold text-xs text-blue-700 font-mono truncate" x-text="formatRupiah(prod.price)"></span>
+                                <span class="w-6 h-6 rounded-full bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center text-xs font-bold transition shrink-0">+</span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Tampilan Jika Produk Kosong -->
+                <div x-show="filteredProducts.length === 0" class="text-center py-16 space-y-2">
+                    <svg class="w-12 h-12 text-slate-300 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                    </svg>
+                    <p class="text-xs font-semibold text-slate-500">Tidak ada produk yang cocok</p>
+                    <button type="button" @click="pullCatalogFromServer()" class="text-xs text-blue-600 font-bold hover:underline">
+                        Unduh Katalog dari PC Server
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- KOLOM KANAN: KERANJANG BELANJA & TOTAL (Ramah tablet 7-10 inch) -->
+        <aside class="w-72 sm:w-80 md:w-88 lg:w-96 bg-white flex flex-col justify-between shrink-0 shadow-lg z-10 border-l border-slate-200">
+            <!-- Header Keranjang -->
+            <div class="p-3 border-b border-slate-200 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <h2 class="font-bold text-sm text-slate-800">Pesanan Kasir</h2>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700" x-text="cart.length"></span>
+                </div>
+                <button type="button"
+                        x-show="cart.length > 0"
+                        @click="clearCart()"
+                        class="text-[11px] text-red-600 hover:text-red-700 font-semibold p-1">
+                    Kosongkan
+                </button>
+            </div>
+
+            <!-- List Item Keranjang -->
+            <div class="flex-1 overflow-y-auto p-2.5 sm:p-3 space-y-2">
+                <template x-for="(item, index) in cart" :key="index">
+                    <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col gap-1.5">
+                        <div class="flex items-start justify-between gap-2">
+                            <span class="font-bold text-xs text-slate-800 line-clamp-1 flex-1" x-text="item.name"></span>
+                            <span class="font-mono text-xs font-bold text-slate-800 shrink-0" x-text="formatRupiah(item.subtotal)"></span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs text-slate-500">
+                            <span class="truncate mr-2" x-text="formatRupiah(item.price) + ' / ' + item.unit_label"></span>
+                            <!-- Touch-friendly Stepper Buttons (Minimal 32x32px untuk jari kasir tablet) -->
+                            <div class="flex items-center gap-1 bg-white border border-slate-300 rounded-lg overflow-hidden shrink-0">
+                                <button type="button" @click="updateQty(index, -1)" class="w-8 h-8 hover:bg-slate-100 active:bg-slate-200 flex items-center justify-center font-bold text-slate-700 text-sm">-</button>
+                                <span class="w-8 text-center font-mono font-bold text-xs" x-text="item.qty"></span>
+                                <button type="button" @click="updateQty(index, 1)" class="w-8 h-8 hover:bg-slate-100 active:bg-slate-200 flex items-center justify-center font-bold text-slate-700 text-sm">+</button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <div x-show="cart.length === 0" class="h-full flex flex-col items-center justify-center text-slate-400 py-12">
+                    <svg class="w-12 h-12 stroke-1 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                    </svg>
+                    <p class="text-xs font-semibold">Sentuh produk di kiri untuk memesan</p>
+                </div>
+            </div>
+
+            <!-- Ringkasan & Tombol Bayar -->
+            <div class="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-200 space-y-2.5 shrink-0">
+                <div class="space-y-1 text-xs">
+                    <div class="flex justify-between text-slate-500">
+                        <span>Subtotal</span>
+                        <span class="font-mono font-semibold" x-text="formatRupiah(subtotal)"></span>
+                    </div>
+                    <div class="flex justify-between text-sm sm:text-base font-bold text-slate-900 pt-1 border-t border-slate-200">
+                        <span>Total Bayar</span>
+                        <span class="font-mono text-blue-700 text-base sm:text-lg" x-text="formatRupiah(total)"></span>
+                    </div>
+                </div>
+
+                <button type="button"
+                        @click="openPaymentModal()"
+                        :disabled="cart.length === 0"
+                        class="w-full py-3.5 rounded-xl font-bold text-sm text-white shadow-md transition flex items-center justify-center gap-2 active:scale-98"
+                        :class="cart.length > 0 ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 cursor-pointer' : 'bg-slate-300 cursor-not-allowed'">
+                    <span>BAYAR</span>
+                    <span class="font-mono" x-show="cart.length > 0" x-text="'(' + formatRupiah(total) + ')'"></span>
+                </button>
+            </div>
+        </aside>
+    </main>
+
+    <!-- MODAL PEMBAYARAN CEPAT -->
+    <div x-show="showPayModal" x-cloak class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl space-y-4 p-5" @click.away="showPayModal = false">
+            <div class="flex items-center justify-between border-b pb-3">
+                <h3 class="font-bold text-base text-slate-800">Pilih Metode Pembayaran</h3>
+                <button type="button" @click="showPayModal = false" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">✕</button>
+            </div>
+
+            <!-- Total yang Harus Dibayar -->
+            <div class="bg-blue-50 p-3.5 rounded-xl text-center border border-blue-200">
+                <span class="text-xs font-semibold text-blue-600">Total Tagihan</span>
+                <div class="text-2xl font-black font-mono text-blue-800" x-text="formatRupiah(total)"></div>
+            </div>
+
+            <!-- Pilihan Metode (Touch-friendly minimum 44px) -->
+            <div class="grid grid-cols-3 gap-2">
+                <button type="button" @click="paymentMethod = 'cash'; paidAmount = total"
+                        class="p-3 rounded-xl text-xs font-bold border transition flex flex-col items-center gap-1 active:scale-95"
+                        :class="paymentMethod === 'cash' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-700 border-slate-200'">
+                    <span>💵 Tunai</span>
+                </button>
+                <button type="button" @click="paymentMethod = 'qris'; paidAmount = total"
+                        class="p-3 rounded-xl text-xs font-bold border transition flex flex-col items-center gap-1 active:scale-95"
+                        :class="paymentMethod === 'qris' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-700 border-slate-200'">
+                    <span>📱 QRIS</span>
+                </button>
+                <button type="button" @click="paymentMethod = 'transfer'; paidAmount = total"
+                        class="p-3 rounded-xl text-xs font-bold border transition flex flex-col items-center gap-1 active:scale-95"
+                        :class="paymentMethod === 'transfer' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 text-slate-700 border-slate-200'">
+                    <span>💳 Transfer</span>
+                </button>
+            </div>
+
+            <!-- Input Uang Diterima & Tombol Cepat Tunai -->
+            <div x-show="paymentMethod === 'cash'" class="space-y-2">
+                <label class="block text-xs font-semibold text-slate-700">Uang Tunai Diterima:</label>
+                <input type="number" x-model.number="paidAmount" class="w-full p-2.5 border rounded-xl font-mono text-lg font-bold text-slate-800">
+                
+                <div class="flex flex-wrap gap-1.5 pt-1">
+                    <button type="button" @click="setQuickCash(total)" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 active:bg-slate-300">Uang Pas</button>
+                    <template x-for="nom in quickCashNominals" :key="nom">
+                        <button type="button" @click="setQuickCash(nom)" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 active:bg-slate-300" x-text="formatRupiah(nom)"></button>
+                    </template>
+                </div>
+
+                <div class="p-3 rounded-xl bg-slate-50 border flex justify-between items-center text-xs">
+                    <span class="font-semibold text-slate-600">Kembalian:</span>
+                    <span class="font-mono font-bold text-base text-emerald-600" x-text="formatRupiah(changeAmount)"></span>
+                </div>
+            </div>
+
+            <!-- Tombol Selesaikan Transaksi -->
+            <button type="button"
+                    @click="processCheckout()"
+                    class="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm shadow-md transition active:scale-98">
+                SELESAIKAN TRANSAKSI (SIMPAN OFFLINE)
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL STRUK SUKSES & CETAK BLUETOOTH -->
+    <div x-show="showReceiptModal" x-cloak class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl p-5 space-y-4" @click.away="showReceiptModal = false">
+            <div class="text-center space-y-1">
+                <div class="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto text-xl font-bold">✓</div>
+                <h3 class="font-bold text-base text-slate-900">Transaksi Selesai!</h3>
+                <p class="text-xs text-slate-500" x-text="'No: ' + (currentReceipt?.invoice_no || '')"></p>
+            </div>
+
+            <!-- Pratinjau Struk Sederhana -->
+            <div id="printable-receipt" class="p-3 bg-slate-50 rounded-xl border font-mono text-[11px] space-y-1 text-slate-700">
+                <div class="text-center font-bold text-xs" x-text="storeProfile.name"></div>
+                <div class="text-center text-[10px]" x-text="storeProfile.address"></div>
+                <div class="border-b border-dashed my-1"></div>
+                <template x-for="it in currentReceipt?.items" :key="it.name">
+                    <div class="flex justify-between">
+                        <span x-text="it.name + ' x' + it.qty"></span>
+                        <span x-text="formatRupiah(it.subtotal)"></span>
+                    </div>
+                </template>
+                <div class="border-b border-dashed my-1"></div>
+                <div class="flex justify-between font-bold">
+                    <span>TOTAL:</span>
+                    <span x-text="formatRupiah(currentReceipt?.total)"></span>
+                </div>
+                <div class="flex justify-between text-[10px]">
+                    <span>KEMBALIAN:</span>
+                    <span x-text="formatRupiah(currentReceipt?.change_amount)"></span>
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <button type="button"
+                        @click="printThermalReceipt()"
+                        :disabled="isPrinting"
+                        class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                    <span>Cetak Struk Thermal (Bluetooth)</span>
+                </button>
+                <button type="button"
+                        @click="showReceiptModal = false"
+                        class="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition">
+                    Transaksi Baru
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL PENGATURAN TABLET -->
+    <div x-show="showSettingsModal" x-cloak class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl p-5 space-y-4" @click.away="showSettingsModal = false">
+            <div class="flex items-center justify-between border-b pb-3">
+                <h3 class="font-bold text-base text-slate-800">Pengaturan Tablet Kasir</h3>
+                <button type="button" @click="showSettingsModal = false" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">✕</button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Alamat Server PC (JPOS Utama):</label>
+                    <input type="text" x-model="serverUrl" placeholder="contoh: http://seraya.local:8000 atau http://192.168.1.10:8000"
+                           class="w-full p-2.5 border rounded-xl text-xs font-mono font-semibold">
+                    <p class="text-[10px] text-slate-400 mt-1">Alamat komputer PC server toko Anda untuk sinkronisasi data.</p>
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Nama Kasir di Tablet Ini:</label>
+                    <input type="text" x-model="cashierName" class="w-full p-2.5 border rounded-xl text-xs font-semibold">
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Secret Sync Token (X-JPOS-TABLET-TOKEN):</label>
+                    <input type="password" x-model="tabletToken" placeholder="Salin dari Pengaturan > Akses Jaringan di PC"
+                           class="w-full p-2.5 border rounded-xl text-xs font-mono font-semibold">
+                    <p class="text-[10px] text-slate-400 mt-1">Token keamanan wajib untuk sinkronisasi data dengan server PC toko.</p>
+                </div>
+
+                <div class="p-3 rounded-xl bg-slate-50 border space-y-2">
+                    <span class="font-bold text-slate-700 block">Printer Struk Bluetooth:</span>
+                    <button type="button" @click="connectBluetoothPrinter()"
+                            class="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 active:bg-indigo-200 border border-indigo-200 font-bold transition flex items-center gap-1.5">
+                        <span>Sambungkan Printer Bluetooth (ESC/POS)</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex gap-2 pt-2 border-t">
+                <button type="button" @click="saveSettings()" class="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs transition">
+                    Simpan Pengaturan
+                </button>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

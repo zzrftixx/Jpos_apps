@@ -30,16 +30,20 @@ class SesiAplikasiTest extends JposTestCase
 
     private function path(string $nama): string
     {
-        return storage_path('framework/' . $nama);
+        $path = storage_path('framework/' . $nama);
+        clearstatcache(true, $path);
+        return $path;
     }
 
     private function bersihkanPenanda(): void
     {
         foreach (['jpos-detak', 'jpos-tutup'] as $nama) {
-            if (is_file($this->path($nama))) {
-                unlink($this->path($nama));
+            $path = storage_path('framework/' . $nama);
+            if (is_file($path)) {
+                @unlink($path);
             }
         }
+        clearstatcache();
     }
 
     public function test_detak_meninggalkan_penanda_yang_dibaca_launcher(): void

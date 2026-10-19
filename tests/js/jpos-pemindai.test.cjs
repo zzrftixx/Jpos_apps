@@ -22,7 +22,7 @@ function cek(nama, syarat) {
 }
 
 /** DOM sekadarnya - cukup untuk menjalankan berkasnya, tanpa memasang pustaka apa pun. */
-function jalankanDenganKolom(atribut, jedaMs = 10) {
+function jalankanDenganKolom(atribut, jedaMs = 10, tombolAkhir = 'Enter') {
     const pendengar = [];
     const kolom = {
         tagName: 'INPUT',
@@ -70,9 +70,9 @@ function jalankanDenganKolom(atribut, jedaMs = 10) {
     };
 
     '8991234567890'.split('').forEach((c) => { kirim(c); kolom.value += c; });
-    const enterDicegah = kirim('Enter');
+    const tombolDicegah = kirim(tombolAkhir);
 
-    return { peristiwa, enterDicegah, nilaiKolom: kolom.value };
+    return { peristiwa, enterDicegah: tombolDicegah, tombolDicegah, nilaiKolom: kolom.value };
 }
 
 // --- Kolom biasa (mis. nominal bayar di kasir): pindaian DITANGKAP -----------------
@@ -86,6 +86,18 @@ cek('kolom biasa: Enter dicegah supaya tidak memicu apa pun',
     biasa.enterDicegah === true);
 cek('kolom biasa: isi kolom dikembalikan (barcode tidak jadi nominal)',
     biasa.nilaiKolom === 'ISI-SEMULA');
+
+// --- Scanner fisik dengan akhiran Tab: pindaian DITANGKAP & Tab dicegah -------------
+const scannerTab = jalankanDenganKolom({ name: 'paid_amount' }, 10, 'Tab');
+
+cek('scanner akhiran Tab: peristiwa pindaian tetap tertangkap',
+    scannerTab.peristiwa.length === 1 && scannerTab.peristiwa[0].type === 'jpos:barcode-dipindai');
+cek('scanner akhiran Tab: kodenya utuh terbawa',
+    scannerTab.peristiwa[0] && scannerTab.peristiwa[0].detail.kode === '8991234567890');
+cek('scanner akhiran Tab: Tab dicegah agar fokus tidak berpindah',
+    scannerTab.tombolDicegah === true);
+cek('scanner akhiran Tab: isi kolom dikembalikan utuh',
+    scannerTab.nilaiKolom === 'ISI-SEMULA');
 
 // --- Scanner fisik dengan latensi 40ms: pindaian TETAP DITANGKAP (ambang 50ms) ----
 const scanner40ms = jalankanDenganKolom({ name: 'paid_amount' }, 40);

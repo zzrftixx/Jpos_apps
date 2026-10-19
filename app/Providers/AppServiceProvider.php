@@ -145,7 +145,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $flush = fn () => app(ProductCatalog::class)->flush();
 
-        foreach ([Product::class, ProductUnit::class, Unit::class, \App\Models\Promotion::class, \App\Models\PromotionItem::class] as $model) {
+        foreach ([Product::class, ProductUnit::class, Unit::class, \App\Models\StockMovement::class, \App\Models\Promotion::class, \App\Models\PromotionItem::class] as $model) {
             $model::saved($flush);
             $model::deleted($flush);
         }

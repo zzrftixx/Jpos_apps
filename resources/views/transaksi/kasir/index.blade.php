@@ -739,7 +739,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                 {{-- Baris Input Pencarian & Pindai Barcode --}}
                 <div class="kasir-search-row">
                     <div class="relative flex-1">
-                        <input type="text" x-model.debounce.120ms="search" x-ref="searchInput" @keydown.enter.prevent="cariAtauPindai()"
+                        <input type="text" x-model.debounce.250ms="search" x-ref="searchInput" @keydown.enter.prevent="cariAtauPindai()"
                             placeholder="Cari nama produk, SKU, atau scan barcode... (Enter)"
                             class="kasir-search-input">
                         <svg class="kasir-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"/></svg>
@@ -2848,10 +2848,29 @@ function kasirApp() {
                     this.processing = false;
                     return;
                 }
+                // 1. Kurangi stok produk yang terjual di memori lokal secara instan
+                const itemsTerjual = [...this.cart];
+                itemsTerjual.forEach(item => {
+                    const p = this.allProducts.find(x => x.id === item.product_id);
+                    if (p && p.type !== 'jasa') {
+                        p.stock = Math.max(0, Math.round((p.stock - (item.qty * item.unit_conversion)) * 1000) / 1000);
+                    }
+                });
+
+                // 2. Buka struk/invoice untuk dicetak
                 this.bukaDokumen(data.receipt_url);
 
-                // Draf dibuang lebih dulu, sebelum halaman dimuat ulang - kalau tidak,
-                // transaksi yang baru saja dibayar akan muncul lagi sebagai keranjang.
+                // 3. Update poin pelanggan jika ada
+                if (data.points_balance !== null && data.points_balance !== undefined && this.customerId) {
+                    this.customerPointsById[this.customerId] = data.points_balance;
+                }
+
+                // 4. Update hitungan pesanan jika waiting list
+                if (this.isWaitingList) {
+                    this.jumlahPesanan = (this.jumlahPesanan || 0) + 1;
+                }
+
+                // 5. Bersihkan draf & reset keranjang secara instan tanpa reload halaman
                 this.hapusDraf();
                 this.cart = [];
                 this.discount = 0;
@@ -2860,9 +2879,13 @@ function kasirApp() {
                 this.paidAmount = 0;
                 this.customerId = '';
                 this.isWaitingList = false;
+                this.modePesanan = 'tanpa_dp';
                 this.dueDate = '';
-
-                window.location.reload();
+                this.search = '';
+                if (this.$refs.searchInput) this.$refs.searchInput.value = '';
+                this.errorMsg = '';
+                this.beriTahuPindai('Transaksi #' + (data.sale_id || '') + ' berhasil disimpan!', false);
+                this.focusSearch();
             } catch (e) {
                 console.error('Checkout network error:', e);
                 this.errorMsg = 'Gagal menghubungi server. Pastikan aplikasi JPOS.exe di komputer ini menyala.';

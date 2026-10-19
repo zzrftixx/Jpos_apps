@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Console\Commands\PulihkanLoginCommand;
 use App\Http\Controllers\Concerns\OptimizesUploadedImages;
 use App\Models\Setting;
+use App\Support\NetworkInfo;
 use App\Support\SqliteBackup;
 use App\Support\Struk;
 use Illuminate\Http\Request;
@@ -437,6 +438,16 @@ class SettingController extends Controller
         return back()->with('success', 'Migrasi database berhasil dijalankan.');
     }
 
+    public function perbaikiHpp()
+    {
+        try {
+            $hasil = \App\Support\Akuntansi::perbaikiHppAbnormal();
+            return back()->with('success', "Sinkronisasi HPP selesai. {$hasil['produk_count']} produk dan {$hasil['items_count']} item transaksi disesuaikan.");
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Gagal memperbaiki HPP: ' . $e->getMessage());
+        }
+    }
+
     public function wipeData(Request $request, SqliteBackup $backup)
     {
         abort_unless($request->user()->role?->slug === 'admin', 403, 'Hanya admin yang bisa melakukan aksi ini.');
@@ -547,25 +558,87 @@ class SettingController extends Controller
 
     public function jaringan()
     {
-        $urls = \App\Support\NetworkInfo::getAccessUrls();
-        $port = \App\Support\NetworkInfo::getActivePort();
-        $firewallCmd = \App\Support\NetworkInfo::getFirewallCommand();
+        $urls = NetworkInfo::getAccessUrls();
+        $port = NetworkInfo::getActivePort();
+        $firewallCmd = NetworkInfo::getFirewallCommand();
         $settings = Setting::get('jaringan_lan', [
             'mode_lan_enabled' => true,
+            'custom_domain' => '',
         ]);
 
-        return view('pengaturan.jaringan', compact('urls', 'port', 'firewallCmd', 'settings'));
+        $customDomain = NetworkInfo::cleanDomain($settings['custom_domain'] ?? null);
+        $primaryIp = NetworkInfo::getPrimaryLanIp();
+        $portSuffix = ($port === 80) ? '' : ":{$port}";
+        $customDomainUrl = $customDomain ? "http://{$customDomain}{$portSuffix}" : null;
+        $mdnsDomain = NetworkInfo::getMdnsDomain();
+        $mdnsUrl = "http://{$mdnsDomain}{$portSuffix}";
+
+        // Format baris entri file hosts untuk client Windows
+        $domainTarget = $customDomain ?: 'kasir.toko';
+        $hostsEntry = "{$primaryIp}  {$domainTarget}";
+
+        // Perintah 1-baris PowerShell Administrator untuk Komputer Kasir Client (Kasir 2/3 Windows)
+        $psHostsCmd = 'Add-Content -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Value "`n' . "{$primaryIp}  {$domainTarget}" . '"';
+
+        // Perintah 1-baris Terminal untuk Komputer Kasir Mac / Linux
+        $macHostsCmd = 'echo "' . "{$primaryIp}  {$domainTarget}" . '" | sudo tee -a /etc/hosts';
+
+        // Perintah jika ingin membuka domain di Komputer Server ini sendiri (Localhost)
+        $serverHostsCmd = PHP_OS_FAMILY === 'Windows'
+            ? 'Add-Content -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Value "`n127.0.0.1  ' . $domainTarget . '"'
+            : 'echo "127.0.0.1  ' . $domainTarget . '" | sudo tee -a /etc/hosts';
+
+        // Token keamanan sinkronisasi tablet (X-JPOS-TABLET-TOKEN)
+        $tabletSyncToken = \App\Http\Middleware\VerifyTabletSyncToken::getOrGenerateToken();
+
+        return view('pengaturan.jaringan', compact(
+            'urls',
+            'port',
+            'firewallCmd',
+            'settings',
+            'customDomain',
+            'primaryIp',
+            'customDomainUrl',
+            'mdnsDomain',
+            'mdnsUrl',
+            'hostsEntry',
+            'psHostsCmd',
+            'macHostsCmd',
+            'serverHostsCmd',
+            'tabletSyncToken'
+        ));
     }
 
     public function updateJaringan(Request $request)
     {
+        $request->validate([
+            'custom_domain' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $cleanedDomain = null;
+        if ($request->filled('custom_domain')) {
+            $cleanedDomain = NetworkInfo::cleanDomain($request->input('custom_domain'));
+            if (!$cleanedDomain) {
+                return back()->withInput()->with('error', 'Format nama domain tidak valid atau dilarang. Gunakan domain lokal minimal 2 kata terpisah titik (contoh: kasir.toko atau pos.lan).');
+            }
+        }
+
         $data = [
-            'mode_lan_enabled' => $request->boolean('mode_lan_enabled'),
+            'mode_lan_enabled' => true,
+            'custom_domain' => $cleanedDomain ?: '',
         ];
 
         Setting::set('jaringan_lan', $data);
 
         return back()->with('success', 'Pengaturan Jaringan LAN berhasil disimpan.');
+    }
+
+    public function regenerateTabletToken()
+    {
+        $newToken = \Illuminate\Support\Str::random(32);
+        Setting::set(\App\Http\Middleware\VerifyTabletSyncToken::SETTING_KEY, $newToken);
+
+        return back()->with('success', 'Secret Sync Token tablet berhasil dibuat ulang. Jangan lupa perbarui token di aplikasi kasir tablet Anda.');
     }
 
     public function tentang()

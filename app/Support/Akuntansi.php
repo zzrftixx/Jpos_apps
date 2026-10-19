@@ -568,4 +568,70 @@ class Akuntansi
 
         return $query->orderByDesc('created_at');
     }
+
+    /**
+     * Memperbaiki dan menyeimbangkan HPP yang abnormal akibat kesalahan input harga modal
+     * produk satuan bertingkat (mis. harga modal per karung/dus diinput ke satuan dasar kg/pcs).
+     *
+     * Dilengkapi pengaman nama produk multi-kata kunci dan lockForUpdate agar hanya mengeksekusi
+     * produk yang benar-benar sesuai dan tidak merusak database toko lain.
+     */
+    public static function perbaikiHppAbnormal(): array
+    {
+        return DB::transaction(function () {
+            $daftarKoreksi = [
+                1500 => ['nama' => 'beras lombok 25kg', 'modal_dasar' => 14500, 'keywords' => ['beras', 'lombok']],
+                1519 => ['nama' => 'teh gelas', 'modal_dasar' => 760.42, 'keywords' => ['teh', 'gelas']],
+                608  => ['nama' => 'energen vanilla', 'modal_dasar' => 1900, 'keywords' => ['energen', 'vanilla']],
+                994  => ['nama' => 'energen jahe renc', 'modal_dasar' => 1935, 'keywords' => ['energen', 'jahe']],
+                995  => ['nama' => 'energen kacang hijau', 'modal_dasar' => 1900, 'keywords' => ['energen', 'kacang']],
+                1051 => ['nama' => 'koyo salonpas', 'modal_dasar' => 546.15, 'keywords' => ['salonpas', 'koyo']],
+                1081 => ['nama' => 'micin sasa 1000', 'modal_dasar' => 900, 'keywords' => ['sasa', 'micin']],
+                1178 => ['nama' => 'tisu tessa mini isi 6', 'modal_dasar' => 808.33, 'keywords' => ['tessa', 'tisu']],
+                880  => ['nama' => 'better caramel', 'modal_dasar' => 1750, 'keywords' => ['better']],
+                672  => ['nama' => 'chitato lite', 'modal_dasar' => 1700, 'keywords' => ['chitato']],
+                1922 => ['nama' => 'tambal panci 10000/m', 'modal_dasar' => 700, 'keywords' => ['tambal', 'panci']],
+            ];
+
+            $totalItemUpdated = 0;
+            $produkUpdated = 0;
+
+            foreach ($daftarKoreksi as $productId => $info) {
+                $prod = Product::lockForUpdate()->find($productId);
+                if (!$prod) {
+                    continue;
+                }
+
+                // Pengaman nama produk: verifikasi kecocokan kata kunci agar tidak salah menimpa produk toko lain
+                $namaDb = strtolower($prod->name);
+                $cocok = false;
+                foreach ($info['keywords'] as $kw) {
+                    if (str_contains($namaDb, $kw)) {
+                        $cocok = true;
+                        break;
+                    }
+                }
+
+                // Hanya koreksi jika nama cocok dan harga modal saat ini memang abnormal (> modal dasar)
+                if ($cocok && $prod->cost_price > $info['modal_dasar']) {
+                    $prod->update(['cost_price' => $info['modal_dasar']]);
+                    $produkUpdated++;
+
+                    $affectedItems = SaleItem::where('product_id', $productId)
+                        ->where('cost_price_snapshot', '>', $info['modal_dasar'])
+                        ->update(['cost_price_snapshot' => $info['modal_dasar']]);
+                    $totalItemUpdated += $affectedItems;
+                }
+            }
+
+            // Invalidate katalog produk agar harga modal terbarui langsung aktif
+            app(ProductCatalog::class)->flush();
+
+            return [
+                'produk_count' => $produkUpdated,
+                'items_count' => $totalItemUpdated,
+            ];
+        });
+    }
 }
+

@@ -149,7 +149,7 @@
 
         waktuTerakhir = sekarang;
 
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' || e.key === 'Tab') {
             var kode = sangga;
 
             if (kode.length < PANJANG_MIN) {
@@ -159,8 +159,8 @@
             }
 
             // Sampai di sini rentetannya terbukti berasal dari alat pindai. Isi kolom yang
-            // kebetulan terfokus dikembalikan utuh SEBELUM Enter sempat memicu apa pun -
-            // inilah yang mencegah barcode menjadi nominal bayar.
+            // kebetulan terfokus dikembalikan utuh SEBELUM Enter atau Tab sempat memicu apa pun -
+            // inilah yang mencegah barcode menjadi nominal bayar atau memindahkan fokus (Tab).
             //
             // URUTANNYA PENTING: pulihkan DULU, baru bersihkan. Versi pertama berkas ini
             // memanggil bersihkan() lebih dulu, sehingga foto kolomnya sudah terhapus saat

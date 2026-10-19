@@ -1,0 +1,19 @@
+{
+  "name": "JPOS Kasir Tablet Offline",
+  "short_name": "JPOS Kasir",
+  "description": "Aplikasi Kasir Tablet Android Offline JPOS Point of Sale",
+  "start_url": "/tablet/index.html",
+  "scope": "/tablet/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/images/logo-jpos.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

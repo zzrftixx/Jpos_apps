@@ -232,12 +232,14 @@ Route::middleware('auth')->group(function () {
         Route::get('/database', [SettingController::class, 'database'])->name('database');
         Route::post('/database/migrate', [SettingController::class, 'runMigrate'])->name('database.migrate');
         Route::post('/database/wipe', [SettingController::class, 'wipeData'])->name('database.wipe');
+        Route::post('/database/perbaiki-hpp', [SettingController::class, 'perbaikiHpp'])->name('database.perbaiki-hpp');
 
         Route::get('/shift-kasir', [SettingController::class, 'shiftKasir'])->name('shift-kasir');
         Route::post('/shift-kasir', [SettingController::class, 'updateShiftKasir'])->name('shift-kasir.update');
 
         Route::get('/jaringan', [SettingController::class, 'jaringan'])->name('jaringan');
         Route::post('/jaringan', [SettingController::class, 'updateJaringan'])->name('jaringan.update');
+        Route::post('/jaringan/regenerate-tablet-token', [SettingController::class, 'regenerateTabletToken'])->name('jaringan.regenerate-tablet-token');
 
         Route::get('/tentang', [SettingController::class, 'tentang'])->name('tentang');
     });
@@ -252,3 +254,6 @@ Route::middleware('auth')->group(function () {
 // berbagai view (url('media/...') dan asset('storage/...')).
 Route::get('/media/{path}', [MediaController::class, 'show'])->where('path', '.*')->name('media');
 Route::get('/storage/{path}', [MediaController::class, 'show'])->where('path', '.*');
+
+// Rute Cepat untuk Aplikasi Kasir Tablet Android
+Route::get('/tablet', fn() => redirect('/tablet/index.html'))->name('tablet.index');

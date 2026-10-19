@@ -42,13 +42,26 @@ use Illuminate\Support\Facades\Schema;
 class ProductCatalog
 {
     private const TTL_SECONDS = 86400;
+    private const CACHE_DATA_KEY = 'jpos:katalog:data';
+    private const CACHE_FINGERPRINT_KEY = 'jpos:katalog:fingerprint';
 
     /**
      * Daftar produk aktif dalam bentuk siap pakai untuk keranjang belanja.
      */
     public function forCart(): array
     {
-        return Cache::remember($this->cacheKey(), self::TTL_SECONDS, fn () => $this->build());
+        $fingerprint = $this->fingerprint();
+        $cachedFingerprint = Cache::get(self::CACHE_FINGERPRINT_KEY);
+
+        if ($cachedFingerprint === $fingerprint && Cache::has(self::CACHE_DATA_KEY)) {
+            return Cache::get(self::CACHE_DATA_KEY);
+        }
+
+        $data = $this->build();
+        Cache::put(self::CACHE_DATA_KEY, $data, self::TTL_SECONDS);
+        Cache::put(self::CACHE_FINGERPRINT_KEY, $fingerprint, self::TTL_SECONDS);
+
+        return $data;
     }
 
     /**
@@ -56,7 +69,8 @@ class ProductCatalog
      */
     public function flush(): void
     {
-        Cache::forget($this->cacheKey());
+        Cache::forget(self::CACHE_DATA_KEY);
+        Cache::forget(self::CACHE_FINGERPRINT_KEY);
     }
 
     private function build(): array
@@ -111,12 +125,14 @@ class ProductCatalog
     }
 
     /**
-     * Sidik jari isi katalog. Murah: dua agregat sederhana.
+     * Sidik jari isi katalog.
+     * Menghitung jumlah produk, total stok, dan timestamp terbaru.
+     * Menjamin bahwa setiap perubahan produk atau kuantitas stok langsung memicu pembaruan cache.
      */
-    private function cacheKey(): string
+    private function fingerprint(): string
     {
         $products = DB::table('products')
-            ->selectRaw("COUNT(*) as jumlah, COALESCE(MAX(updated_at), '') as terbaru")
+            ->selectRaw("COUNT(*) as jumlah, COALESCE(SUM(stock), 0) as total_stok, COALESCE(MAX(updated_at), '') as terbaru")
             ->first();
 
         $units = DB::table('product_units')
@@ -137,11 +153,16 @@ class ProductCatalog
             ->selectRaw("COUNT(*) as jumlah, COALESCE(MAX(updated_at), '') as terbaru")
             ->first();
 
-        return 'jpos:katalog:' . md5(implode('|', [
-            $products->jumlah, $products->terbaru,
-            $units->jumlah, $units->terbaru,
-            $satuan->jumlah, $satuan->terbaru,
-            $rak->jumlah, $rak->terbaru,
+        return md5(implode('|', [
+            $products->jumlah ?? 0,
+            $products->total_stok ?? 0,
+            $products->terbaru ?? '',
+            $units->jumlah ?? 0,
+            $units->terbaru ?? '',
+            $satuan->jumlah ?? 0,
+            $satuan->terbaru ?? '',
+            $rak->jumlah ?? 0,
+            $rak->terbaru ?? '',
             now()->toDateString(),
         ]));
     }

@@ -119,6 +119,17 @@ class ProductCatalogCacheTest extends JposTestCase
             ->assertDontSee('Produk Awal');
     }
 
+    public function test_cache_ikut_berubah_saat_stok_produk_diubah(): void
+    {
+        $product = $this->makeProduct(['name' => 'Kecap Manis', 'stock' => 10]);
+        $this->catalog()->forCart();
+
+        $product->ubahStok(-3);
+
+        $baris = collect($this->catalog()->forCart())->firstWhere('id', $product->id);
+        $this->assertEquals(7.0, (float) $baris['stock'], 'Perubahan stok harus langsung menginvaliasi cache katalog.');
+    }
+
     /** Filter manual lewat URL tetap dilayani query langsung, bukan katalog penuh. */
     public function test_filter_lewat_url_tetap_berfungsi(): void
     {
