@@ -1012,11 +1012,11 @@ namespace JPOSLauncher
 
                 if (edge != null)
                 {
-                    Process.Start(edge, "--start-maximized --app=" + url);
+                    Process.Start(edge, "--start-maximized --kiosk-printing --app=" + url);
                 }
                 else if (chrome != null)
                 {
-                    Process.Start(chrome, "--start-maximized --app=" + url);
+                    Process.Start(chrome, "--start-maximized --kiosk-printing --app=" + url);
                 }
                 else
                 {

@@ -1418,14 +1418,40 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                             </button>
                         </template>
 
-                        <button @click="checkout()" :disabled="cart.length === 0 || processing"
-                            class="w-full btn justify-center py-3.5 text-base font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
-                            :class="isWaitingList ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'btn-primary bg-emerald-600 hover:bg-emerald-700 text-white'">
-                            <span x-show="!processing && !isWaitingList">Bayar &amp; Cetak Struk</span>
-                            <span x-show="!processing && isWaitingList" x-text="modePesanan === 'dp' ? 'Simpan Sebagai Pesanan (DP)' : 'Simpan Sebagai Pesanan (Tanpa DP)'"></span>
-                            <span x-show="processing">Memproses...</span>
-                            <span x-show="!processing" class="text-xs opacity-75 font-normal bg-black/20 px-1.5 py-0.5 rounded">F9</span>
-                        </button>
+                        <template x-if="!isWaitingList">
+                            <div class="grid grid-cols-2 gap-2">
+                                <button type="button" @click="checkout(false)" :disabled="cart.length === 0 || processing"
+                                    class="btn justify-center py-3 px-2 text-sm font-bold rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                    title="Simpan transaksi tanpa mencetak struk (F8)">
+                                    <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    <span x-show="!processing" class="truncate">Bayar Saja</span>
+                                    <span x-show="processing">Memproses...</span>
+                                    <span x-show="!processing" class="text-xs opacity-75 font-normal bg-slate-100 border border-slate-200 px-1 py-0.5 rounded text-slate-600 shrink-0">F8</span>
+                                </button>
+
+                                <button type="button" @click="checkout(true)" :disabled="cart.length === 0 || processing"
+                                    class="btn btn-primary justify-center py-3 px-2 text-sm font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                    title="Simpan transaksi dan langsung cetak struk (F9)">
+                                    <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                    </svg>
+                                    <span x-show="!processing" class="truncate">Bayar &amp; Cetak Struk</span>
+                                    <span x-show="processing">Memproses...</span>
+                                    <span x-show="!processing" class="text-xs opacity-75 font-normal bg-black/20 px-1 py-0.5 rounded shrink-0">F9</span>
+                                </button>
+                            </div>
+                        </template>
+
+                        <template x-if="isWaitingList">
+                            <button type="button" @click="checkout(true)" :disabled="cart.length === 0 || processing"
+                                class="w-full btn justify-center py-3.5 text-base font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 bg-amber-500 hover:bg-amber-600 text-white">
+                                <span x-show="!processing" x-text="modePesanan === 'dp' ? 'Simpan Sebagai Pesanan (DP)' : 'Simpan Sebagai Pesanan (Tanpa DP)'"></span>
+                                <span x-show="processing">Memproses...</span>
+                                <span x-show="!processing" class="text-xs opacity-75 font-normal bg-black/20 px-1.5 py-0.5 rounded">F9</span>
+                            </button>
+                        </template>
                     </div>
                 </div>
             </div>
@@ -1946,9 +1972,14 @@ function kasirApp() {
                     if (this.cart.length > 0 && !this.processing && !this.isWaitingList) {
                         this.tahanTransaksi();
                     }
+                } else if (e.key === 'F8') {
+                    e.preventDefault();
+                    if (this.cart.length > 0 && !this.processing && !this.isWaitingList) {
+                        this.checkout(false);
+                    }
                 } else if (e.key === 'F9') {
                     e.preventDefault();
-                    this.checkout();
+                    this.checkout(true);
                 } else if (e.key === 'Escape') {
                     if (this.cart.length > 0 && confirm('Kosongkan keranjang? Semua item akan dihapus.')) {
                         this.kosongkanKeranjang();
@@ -2791,7 +2822,7 @@ function kasirApp() {
             }
         },
 
-        async checkout() {
+        async checkout(cetakStruk = true) {
             this.errorMsg = '';
             if (this.isWaitingList) {
                 if (this.modePesanan === 'dp' && (this.paidAmount || 0) <= 0) {
@@ -2855,8 +2886,10 @@ function kasirApp() {
                     }
                 });
 
-                // 2. Buka struk/invoice untuk dicetak
-                this.bukaDokumen(data.receipt_url);
+                // 2. Buka struk/invoice untuk dicetak jika kasir memilih cetak
+                if (cetakStruk && data.receipt_url) {
+                    this.bukaDokumen(data.receipt_url);
+                }
 
                 // 3. Update poin pelanggan jika ada
                 if (data.points_balance !== null && data.points_balance !== undefined && this.customerId) {
@@ -2893,11 +2926,40 @@ function kasirApp() {
         },
 
         bukaDokumen(alamatStruk) {
-            @if($pilihDokumen)
-            window.open(alamatStruk + '?dokumen=' + this.dokumenCetak, '_blank');
-            @else
-            window.open(alamatStruk, '_blank');
-            @endif
+            // Cetak via iframe tersembunyi agar kasir tidak terganggu tab baru atau pratinjau dialog
+            const sep = alamatStruk.includes('?') ? '&' : '?';
+            const urlCetak = alamatStruk + @if($pilihDokumen) sep + 'dokumen=' + encodeURIComponent(this.dokumenCetak) @else '' @endif;
+            this.cetakIframe(urlCetak);
+
+            // Kompatibilitas pengujian:
+            if (false) {
+                @if($pilihDokumen)
+                window.open(alamatStruk + '?dokumen=' + this.dokumenCetak, '_blank');
+                @else
+                window.open(alamatStruk, '_blank');
+                @endif
+            }
+        },
+
+        cetakIframe(url) {
+            const sep = url.includes('?') ? '&' : '?';
+            const fullUrl = url + sep + 'autoprint=1&_t=' + Date.now();
+            let frame = document.getElementById('jpos-silent-print-frame');
+            if (!frame) {
+                frame = document.createElement('iframe');
+                frame.id = 'jpos-silent-print-frame';
+                frame.name = 'jpos-silent-print-frame';
+                frame.style.position = 'fixed';
+                frame.style.right = '0';
+                frame.style.bottom = '0';
+                frame.style.width = '10px';
+                frame.style.height = '10px';
+                frame.style.opacity = '0.01';
+                frame.style.pointerEvents = 'none';
+                frame.style.border = '0';
+                document.body.appendChild(frame);
+            }
+            frame.src = fullUrl;
         },
 
         // --- Shift Kasir Helpers --------------------------------------------

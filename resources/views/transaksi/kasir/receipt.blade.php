@@ -424,7 +424,8 @@
 
     <script>
         window.onload = function () {
-            @if($printerStruk['auto_print'] ?? false)
+            @if(($printerStruk['auto_print'] ?? false) || request()->has('autoprint'))
+                window.focus();
                 window.print();
             @endif
         };
