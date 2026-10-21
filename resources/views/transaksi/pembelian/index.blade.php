@@ -2494,7 +2494,7 @@ function pembelianApp(initialProducts = []) {
     {{-- MODAL BAYAR HUTANG KE PEMASOK                            --}}
     {{-- ======================================================== --}}
     <div x-show="showBayar" x-cloak class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-        <div @click.outside="showBayar=false" class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-200">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-200">
             <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
                 <div class="flex items-center gap-2.5">
                     <div class="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">

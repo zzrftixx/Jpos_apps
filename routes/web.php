@@ -233,6 +233,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/database/migrate', [SettingController::class, 'runMigrate'])->name('database.migrate');
         Route::post('/database/wipe', [SettingController::class, 'wipeData'])->name('database.wipe');
         Route::post('/database/perbaiki-hpp', [SettingController::class, 'perbaikiHpp'])->name('database.perbaiki-hpp');
+        Route::post('/database/optimize', [SettingController::class, 'optimizeDatabase'])->name('database.optimize');
 
         Route::get('/shift-kasir', [SettingController::class, 'shiftKasir'])->name('shift-kasir');
         Route::post('/shift-kasir', [SettingController::class, 'updateShiftKasir'])->name('shift-kasir.update');

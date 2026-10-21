@@ -63,7 +63,7 @@
         </div>
 
         <div x-show="showModal" x-cloak class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-            <div @click.outside="showModal=false" class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
                 <h3 class="font-semibold text-lg mb-4" x-text="editItem ? 'Edit User' : 'Tambah User'"></h3>
                 <form :action="editItem ? '{{ url('manajemen/user') }}/' + editItem.id : '{{ route('user.store') }}'"
                     method="POST" class="space-y-3">

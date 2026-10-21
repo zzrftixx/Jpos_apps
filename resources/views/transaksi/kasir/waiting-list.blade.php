@@ -183,7 +183,7 @@
 
     {{-- Pay Modal --}}
     <div x-show="showPayModal" x-cloak class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-        <div @click.outside="showPayModal=false" class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
             <h3 class="font-semibold text-lg mb-1">Pelunasan Pesanan</h3>
             <p class="text-sm text-slate-500 mb-4" x-text="payOrder ? payOrder.invoice_no : ''"></p>
             <template x-if="payOrder">

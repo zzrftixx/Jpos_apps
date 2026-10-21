@@ -9,6 +9,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Persiapan sekali jalan sebelum server dinyalakan, dipanggil JPOS.exe saat start.
@@ -63,6 +64,10 @@ class PrepareCommand extends Command
         // Katalog produk yang tersimpan bisa berasal dari versi aplikasi sebelumnya.
         try {
             $catalog->flush();
+            if (Schema::hasTable('cache')) {
+                DB::table('cache')->where('expiration', '<', now()->timestamp)->delete();
+                DB::statement('PRAGMA optimize');
+            }
         } catch (\Throwable) {
             // Cache kosong bukan alasan gagal start.
         }

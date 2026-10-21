@@ -6,7 +6,7 @@
 
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
         <form method="GET" class="flex gap-2 flex-wrap" data-live-search>
-            <input type="text" name="q" value="{{ request('q') }}" placeholder="Cari nama/SKU/barcode..." class="form-input w-64">
+            <input type="text" name="q" id="produk-search-input" value="{{ request('q') }}" placeholder="Cari nama/SKU/barcode..." class="form-input w-64">
             <select name="category_id" class="form-select w-44">
                 <option value="">Semua Kategori</option>
                 @foreach($categories as $cat)
@@ -108,9 +108,9 @@
     <div class="mt-4">{{ $products->links() }}</div>
     </div>
 
-    {{-- Modal --}}
+    {{-- Modal (Backdrop statis: tidak tertutup klik luar agar input tidak hilang tanpa sengaja) --}}
     <div x-show="showModal" x-cloak class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-        <div @click.outside="showModal=false" class="bg-white rounded-xl shadow-xl w-full max-w-2xl my-8 max-h-[85vh] flex flex-col">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl my-8 max-h-[85vh] flex flex-col">
             <h3 class="font-semibold text-lg p-6 pb-0 shrink-0" x-text="editItem ? 'Edit Produk' : 'Tambah Produk'"></h3>
             <form :action="editItem ? '{{ url('master/produk') }}/' + editItem.id : '{{ route('produk.store') }}'" method="POST" enctype="multipart/form-data" @keydown.enter="alihkanEnterForm($event)" class="flex flex-col flex-1 min-h-0">
                 @csrf
@@ -581,6 +581,9 @@
                     <div>
                         <label class="form-label">Stok Minimum (opsional, dalam <span x-text="unit"></span>)</label>
                         <input type="text" data-jpos-number data-number-decimals="4" data-number-empty="kosong" name="min_stock" x-number.oneway="editItem ? editItem.min_stock : ''" placeholder="0" class="form-input">
+                        <p class="text-[11px] text-amber-700 mt-1 leading-snug">
+                            ⚠️ <strong>Batas Pengingat Stok Menipis.</strong> Kolom ini <em>bukan</em> untuk menambah stok produk. Untuk mengisi/menambah stok berjalan, isi di kolom <strong>Stok</strong> di samping atau melalui menu <strong>Pembelian / Retur</strong>.
+                        </p>
                     </div>
                 </div>
 
@@ -945,14 +948,33 @@ function masterProdukApp() {
         },
 
         tangkapBarcodeModal(kode) {
-            if (!this.showModal) return;
-            const inputBarcode = document.querySelector('form input[name="barcode"]');
-            if (inputBarcode) {
-                inputBarcode.value = kode;
-                inputBarcode.dispatchEvent(new Event('input', { bubbles: true }));
-                const selectKategori = document.querySelector('form select[name="category_id"]');
-                if (selectKategori) {
-                    selectKategori.focus();
+            if (!kode) return;
+            const barcodeBersih = String(kode).trim();
+            if (!barcodeBersih) return;
+
+            if (this.showModal) {
+                // Modal Tambah/Edit Produk terbuka: isi kolom barcode pada formulir modal
+                const inputBarcode = document.querySelector('form input[name="barcode"]');
+                if (inputBarcode) {
+                    inputBarcode.value = barcodeBersih;
+                    inputBarcode.dispatchEvent(new Event('input', { bubbles: true }));
+                    const selectKategori = document.querySelector('form select[name="category_id"]');
+                    if (selectKategori) {
+                        selectKategori.focus();
+                    }
+                }
+            } else {
+                // Di halaman tabel produk: otomatis cari produk berdasarkan barcode fisik yang dipindai
+                const searchInput = document.getElementById('produk-search-input') || document.querySelector('form[data-live-search] input[name="q"]');
+                if (searchInput) {
+                    searchInput.value = barcodeBersih;
+                    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    const searchForm = searchInput.closest('form');
+                    if (searchForm) {
+                        searchForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                    }
+                    searchInput.focus();
+                    searchInput.select();
                 }
             }
         },

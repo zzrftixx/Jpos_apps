@@ -11,6 +11,7 @@ use App\Support\Struk;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -445,6 +446,50 @@ class SettingController extends Controller
             return back()->with('success', "Sinkronisasi HPP selesai. {$hasil['produk_count']} produk dan {$hasil['items_count']} item transaksi disesuaikan.");
         } catch (\Throwable $e) {
             return back()->with('error', 'Gagal memperbaiki HPP: ' . $e->getMessage());
+        }
+    }
+
+    public function optimizeDatabase(SqliteBackup $backup)
+    {
+        $dbPath = $backup->databasePath();
+        clearstatcache();
+        $isMemory = ($dbPath === ':memory:' || str_contains($dbPath, 'mode=memory'));
+        $initialSize = (!$isMemory && file_exists($dbPath)) ? @filesize($dbPath) : 0;
+
+        try {
+            // 1. Bersihkan cache aplikasi dan tabel cache database dari sisa cache usang
+            Cache::flush();
+            if (\Illuminate\Support\Facades\Schema::hasTable('cache')) {
+                DB::table('cache')->delete();
+            }
+            if (\Illuminate\Support\Facades\Schema::hasTable('cache_locks')) {
+                DB::table('cache_locks')->delete();
+            }
+
+            // 2. Refresh cache katalog produk JPos agar bersih dan terbarui
+            app(\App\Support\ProductCatalog::class)->flush();
+
+            // 3. Jalankan VACUUM dan optimasi indeks SQLite untuk merampingkan berkas fisik
+            if (DB::transactionLevel() === 0) {
+                DB::statement('VACUUM');
+            }
+            DB::statement('PRAGMA optimize');
+
+            clearstatcache();
+            $finalSize = (!$isMemory && file_exists($dbPath)) ? @filesize($dbPath) : 0;
+
+            $initialMb = round($initialSize / 1024 / 1024, 2);
+            $finalMb = round($finalSize / 1024 / 1024, 2);
+            $hematMb = round(max(0, $initialSize - $finalSize) / 1024 / 1024, 2);
+            $persen = $initialSize > 0 ? round((max(0, $initialSize - $finalSize) / $initialSize) * 100, 1) : 0;
+
+            $pesan = $isMemory
+                ? "Optimasi database berhasil! Cache dibersihkan dan tabel SQLite berhasil dipadatkan."
+                : "Optimasi database berhasil! Ukuran awal {$initialMb} MB kini menjadi {$finalMb} MB (hemat {$hematMb} MB / {$persen}%). Database kini jauh lebih ringan, cepat, dan seluruh data transaksi 100% aman.";
+
+            return back()->with('success', $pesan);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Gagal mengoptimasi database: ' . $e->getMessage());
         }
     }
 

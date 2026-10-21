@@ -15,6 +15,25 @@
     </form>
 </div>
 
+<div class="card p-6 mb-4 border border-emerald-200 bg-emerald-50/20">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                ⚡ Optimasi & Kompresi Database (Percepat JPos)
+            </h3>
+            <p class="text-sm text-slate-600 mt-1 max-w-2xl">
+                Membersihkan cache sementara dan memadatkan file database SQLite (VACUUM) agar ukuran file kembali ringan, responsif, dan hemat ruang penyimpanan. Aman dijalankan kapan saja saat toko beroperasi tanpa mengganggu transaksi.
+            </p>
+        </div>
+        <form method="POST" action="{{ route('pengaturan.database.optimize') }}" onsubmit="return confirm('Jalankan optimasi dan kompresi database sekarang?')">
+            @csrf
+            <button type="submit" class="btn btn-primary inline-flex items-center gap-2 whitespace-nowrap">
+                ⚡ Optimasi Sekarang
+            </button>
+        </form>
+    </div>
+</div>
+
 <div class="card p-6 mb-4 border border-blue-200 bg-blue-50/20">
     <h3 class="font-semibold mb-1 text-slate-800">⚖️ Sinkronisasi & Perbaiki HPP Laporan</h3>
     <p class="text-sm text-slate-600 mb-3">

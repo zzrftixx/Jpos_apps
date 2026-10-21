@@ -47,7 +47,7 @@
 
     {{-- Modal --}}
     <div x-show="showModal" x-cloak class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 overflow-y-auto">
-        <div @click.outside="showModal=false" class="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 my-8">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 my-8">
             <h3 class="font-semibold text-lg mb-4" x-text="editItem && editItem.id ? 'Edit Role' : 'Tambah Role'"></h3>
             <form :action="editItem && editItem.id ? '{{ url('manajemen/role') }}/' + editItem.id : '{{ route('role.store') }}'" method="POST" class="space-y-3">
                 @csrf

@@ -1467,8 +1467,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
     {{-- MODAL BUKA SHIFT KASIR --}}
     <div x-show="showBukaShiftModal" x-cloak
          class="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200"
-             @click.outside="if (activeShiftId) showBukaShiftModal = false">
+        <div class="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200">
             <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
                 <h3 class="font-bold text-base text-slate-800 flex items-center gap-2">
                     <svg class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
@@ -1567,8 +1566,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
     {{-- MODAL TUTUP SHIFT KASIR --}}
     <div x-show="showTutupShiftModal" x-cloak
          class="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200"
-             @click.outside="showTutupShiftModal = false">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200">
             <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
                 <h3 class="font-bold text-base text-slate-800 flex items-center gap-2">
                     <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
