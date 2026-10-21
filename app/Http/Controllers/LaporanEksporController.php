@@ -392,6 +392,7 @@ class LaporanEksporController extends Controller
         $baris = $produk->map(fn (Product $p) => [
             'nama' => $p->name,
             'sku' => $p->sku ?: '-',
+            'barcode' => $p->barcode ?: '-',
             'kategori' => $p->category->name ?? '-',
             'lokasi' => $p->rackSlot?->label() ?: '-',
             'stok' => (float) $p->stock,
@@ -399,6 +400,7 @@ class LaporanEksporController extends Controller
             'min' => (float) $p->min_stock,
             'status' => $p->isLowStock() ? 'Menipis' : 'Aman',
             'modal' => (float) $p->cost_price,
+            'jual' => (float) $p->sell_price,
             'nilai' => Angka::bulat((float) $p->stock * (float) $p->cost_price),
         ]);
 
@@ -421,15 +423,17 @@ class LaporanEksporController extends Controller
             ->periode(now()->toDateString())
             ->ringkasan($ringkasan)
             ->bagian('Rincian Persediaan', [
-                ['label' => 'Nama Produk', 'key' => 'nama', 'lebar' => 28],
-                ['label' => 'SKU', 'key' => 'sku', 'lebar' => 14],
-                ['label' => 'Kategori', 'key' => 'kategori', 'lebar' => 16],
-                ['label' => 'Lokasi Rak', 'key' => 'lokasi', 'lebar' => 14],
+                ['label' => 'Nama Produk', 'key' => 'nama', 'lebar' => 26],
+                ['label' => 'SKU', 'key' => 'sku', 'lebar' => 12],
+                ['label' => 'Barcode', 'key' => 'barcode', 'lebar' => 14],
+                ['label' => 'Kategori', 'key' => 'kategori', 'lebar' => 14],
+                ['label' => 'Lokasi Rak', 'key' => 'lokasi', 'lebar' => 12],
                 ['label' => 'Stok', 'key' => 'stok', 'format' => 'angka'],
-                ['label' => 'Satuan', 'key' => 'satuan', 'lebar' => 10],
+                ['label' => 'Satuan', 'key' => 'satuan', 'lebar' => 8],
                 ['label' => 'Min. Stok', 'key' => 'min', 'format' => 'angka'],
-                ['label' => 'Status', 'key' => 'status', 'lebar' => 12],
+                ['label' => 'Status', 'key' => 'status', 'lebar' => 10],
                 ['label' => 'Harga Modal', 'key' => 'modal', 'format' => 'rupiah'],
+                ['label' => 'Harga Jual', 'key' => 'jual', 'format' => 'rupiah'],
                 ['label' => 'Nilai Persediaan', 'key' => 'nilai', 'format' => 'rupiah'],
             ], $baris->all(), [
                 'nama' => 'TOTAL',
@@ -439,6 +443,110 @@ class LaporanEksporController extends Controller
                 'Nilai persediaan = stok x harga modal terkini. Angka ini yang masuk sebagai pos Persediaan di Neraca.',
                 'Produk jasa tidak ditampilkan karena tidak punya stok fisik.',
                 'Lokasi rak diambil dari Planogram. Tanda "-" berarti produknya belum ditaruh di rak mana pun.',
+            );
+    }
+
+    /* =================================================================== STOK OPNAME */
+
+    private function laporanStokOpname(Request $request): Laporan
+    {
+        $q = trim((string) $request->q);
+        $categoryId = $request->category_id;
+        $rackId = $request->rack_id;
+        $lowStock = $request->boolean('low_stock');
+        $sortBy = $request->get('sort_by', 'name');
+
+        $query = Product::with(['category', 'rackSlot.rack'])
+            ->where('type', 'barang')
+            ->when($q !== '', function ($subQuery) use ($q) {
+                $subQuery->where(function ($sub) use ($q) {
+                    $sub->where('name', 'like', "%{$q}%")
+                        ->orWhere('sku', 'like', "%{$q}%")
+                        ->orWhere('barcode', 'like', "%{$q}%");
+                });
+            })
+            ->when($categoryId, fn ($subQuery) => $subQuery->where('category_id', $categoryId))
+            ->when($rackId, function ($subQuery) use ($rackId) {
+                $subQuery->whereHas('rackSlot', fn ($slot) => $slot->where('rack_id', $rackId));
+            })
+            ->when($lowStock, fn ($subQuery) => $subQuery->whereColumn('stock', '<=', 'min_stock'));
+
+        if ($sortBy === 'category') {
+            $query->leftJoin('categories', 'categories.id', '=', 'products.category_id')
+                ->orderBy('categories.name')
+                ->orderBy('products.name')
+                ->select('products.*');
+        } elseif ($sortBy === 'stock_asc') {
+            $query->orderBy('stock', 'asc');
+        } elseif ($sortBy === 'stock_desc') {
+            $query->orderBy('stock', 'desc');
+        } else {
+            $query->orderBy('name', 'asc');
+        }
+
+        $produk = $query->get();
+
+        $no = 1;
+        $baris = $produk->map(fn (Product $p) => [
+            'no' => $no++,
+            'sku' => $p->sku ?: '-',
+            'barcode' => $p->barcode ?: '-',
+            'nama' => $p->name,
+            'kategori' => $p->category->name ?? '-',
+            'lokasi' => $p->rackSlot?->label() ?: '-',
+            'satuan' => $p->unit ?: 'Pcs',
+            'stok_sistem' => (float) $p->stock,
+            'stok_fisik' => '',
+            'selisih' => '',
+            'modal' => (float) $p->cost_price,
+            'jual' => (float) $p->sell_price,
+            'total_modal' => Angka::bulat((float) $p->stock * (float) $p->cost_price),
+            'total_jual' => Angka::bulat((float) $p->stock * (float) $p->sell_price),
+        ]);
+
+        $ringkasan = [
+            'Total Jenis Barang' => number_format($produk->count(), 0, ',', '.') . ' jenis',
+            'Total Stok Sistem' => number_format($baris->sum('stok_sistem'), 2, ',', '.'),
+            'Total Nilai Modal (HPP)' => Laporan::format($baris->sum('total_modal'), 'rupiah'),
+            'Total Potensi Nilai Jual' => Laporan::format($baris->sum('total_jual'), 'rupiah'),
+        ];
+
+        if ($q !== '') {
+            $ringkasan['Filter Pencarian'] = $q;
+        }
+        if ($lowStock) {
+            $ringkasan['Filter Stok'] = 'Hanya Stok Menipis';
+        }
+
+        return Laporan::buat('Lembar Cek Stok Opname', 'stok-opname')
+            ->periode(now()->toDateString())
+            ->ringkasan($ringkasan)
+            ->bagian('Daftar Produk untuk Cek Stok Opname', [
+                ['label' => 'No', 'key' => 'no', 'lebar' => 5],
+                ['label' => 'SKU', 'key' => 'sku', 'lebar' => 12],
+                ['label' => 'Barcode', 'key' => 'barcode', 'lebar' => 15],
+                ['label' => 'Nama Produk', 'key' => 'nama', 'lebar' => 26],
+                ['label' => 'Kategori', 'key' => 'kategori', 'lebar' => 14],
+                ['label' => 'Lokasi Rak', 'key' => 'lokasi', 'lebar' => 12],
+                ['label' => 'Satuan', 'key' => 'satuan', 'lebar' => 8],
+                ['label' => 'Stok Komputer', 'key' => 'stok_sistem', 'format' => 'angka'],
+                ['label' => 'Cek Fisik', 'key' => 'stok_fisik', 'lebar' => 12],
+                ['label' => 'Selisih', 'key' => 'selisih', 'lebar' => 10],
+                ['label' => 'Harga Modal', 'key' => 'modal', 'format' => 'rupiah'],
+                ['label' => 'Harga Jual', 'key' => 'jual', 'format' => 'rupiah'],
+                ['label' => 'Nilai Modal', 'key' => 'total_modal', 'format' => 'rupiah'],
+                ['label' => 'Nilai Jual', 'key' => 'total_jual', 'format' => 'rupiah'],
+            ], $baris->all(), [
+                'nama' => 'TOTAL',
+                'stok_sistem' => $baris->sum('stok_sistem'),
+                'total_modal' => $baris->sum('total_modal'),
+                'total_jual' => $baris->sum('total_jual'),
+            ])
+            ->catatan(
+                'Lembar kerja ini digunakan untuk audit penghitungan fisik stok barang di rak toko (Stok Opname).',
+                'Isi kolom "Cek Fisik" secara langsung dengan kuantitas barang fisik yang ditemukan di rak saat pemeriksaan.',
+                'Selisih = Stok Fisik - Stok Komputer. Selisih negatif menunjukkan kehilangan/penyusutan, selisih positif menunjukkan kelebihan/salah catat.',
+                'Harga Modal dan Harga Jual disertakan sebagai acuan nilai valuasi aset toko dan estimasi dampak selisih barang.'
             );
     }
 

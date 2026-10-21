@@ -78,6 +78,7 @@ class EksporLaporanTest extends JposTestCase
             'penjualan' => ['penjualan'],
             'omset' => ['omset'],
             'stok' => ['stok'],
+            'stok opname' => ['stok-opname'],
             'terlaris' => ['terlaris'],
             'per pelanggan' => ['per-pelanggan'],
             'kas' => ['kas'],

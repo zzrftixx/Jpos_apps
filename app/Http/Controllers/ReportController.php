@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\FixedAsset;
 use App\Models\NeracaSnapshot;
 use App\Models\Product;
+use App\Models\Rack;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SalePayment;
@@ -200,6 +201,73 @@ class ReportController extends Controller
             ->withQueryString();
 
         return view('laporan.stok', compact('products'));
+    }
+
+    public function stokOpname(Request $request)
+    {
+        $q = trim((string) $request->q);
+        $categoryId = $request->category_id;
+        $rackId = $request->rack_id;
+        $lowStock = $request->boolean('low_stock');
+        $sortBy = $request->get('sort_by', 'name');
+        $semua = $request->boolean('semua');
+
+        $baseQuery = Product::query()
+            ->where('type', 'barang')
+            ->when($q !== '', function ($subQuery) use ($q) {
+                $subQuery->where(function ($sub) use ($q) {
+                    $sub->where('name', 'like', "%{$q}%")
+                        ->orWhere('sku', 'like', "%{$q}%")
+                        ->orWhere('barcode', 'like', "%{$q}%");
+                });
+            })
+            ->when($categoryId, fn ($subQuery) => $subQuery->where('category_id', $categoryId))
+            ->when($rackId, function ($subQuery) use ($rackId) {
+                $subQuery->whereHas('rackSlot', fn ($slot) => $slot->where('rack_id', $rackId));
+            })
+            ->when($lowStock, fn ($subQuery) => $subQuery->whereColumn('stock', '<=', 'min_stock'));
+
+        // Satu query agregat cepat tanpa N+1 (B1)
+        $summary = (clone $baseQuery)->selectRaw('
+            COUNT(*) as total_items,
+            COALESCE(SUM(stock), 0) as total_stock,
+            COALESCE(SUM(stock * cost_price), 0) as total_cost_value,
+            COALESCE(SUM(stock * sell_price), 0) as total_sell_value
+        ')->first();
+
+        $query = (clone $baseQuery)->with(['category', 'rackSlot.rack']);
+
+        if ($sortBy === 'category') {
+            $query->leftJoin('categories', 'categories.id', '=', 'products.category_id')
+                ->orderBy('categories.name')
+                ->orderBy('products.name')
+                ->select('products.*');
+        } elseif ($sortBy === 'stock_asc') {
+            $query->orderBy('stock', 'asc');
+        } elseif ($sortBy === 'stock_desc') {
+            $query->orderBy('stock', 'desc');
+        } else {
+            $query->orderBy('name', 'asc');
+        }
+
+        $perPage = $semua ? 1500 : 50;
+        $products = $query->paginate($perPage)->withQueryString();
+
+        $categories = Category::orderBy('name')->get();
+        $racks = Rack::orderBy('name')->get();
+
+        return view('laporan.stok-opname', compact(
+            'products',
+            'categories',
+            'racks',
+            'summary',
+            'q',
+            'categoryId',
+            'rackId',
+            'lowStock',
+            'sortBy',
+            'semua'
+        ));
     }
 
     public function stokMovements(Request $request, Product $product)

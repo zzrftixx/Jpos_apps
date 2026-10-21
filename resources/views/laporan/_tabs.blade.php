@@ -7,6 +7,7 @@
         'laporan.neraca' => 'Neraca',
         'laporan.per-pelanggan' => 'Penjualan per Pelanggan',
         'laporan.stok' => 'Stok Barang',
+        'laporan.stok-opname' => 'Cek Stok Opname',
         'laporan.mutasi-stok' => 'Rekap Mutasi Stok',
         'laporan.rekap-pembelian' => 'Rekap Pembelian Barang',
         'laporan.terlaris' => 'Produk Terlaris',

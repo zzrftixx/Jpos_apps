@@ -163,6 +163,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/laba', [ReportController::class, 'laba'])->name('laba');
         Route::get('/per-pelanggan', [ReportController::class, 'perPelanggan'])->name('per-pelanggan');
         Route::get('/stok', [ReportController::class, 'stok'])->name('stok');
+        Route::get('/stok-opname', [ReportController::class, 'stokOpname'])->name('stok-opname');
         Route::get('/stok/{product}', [ReportController::class, 'stokMovements'])->name('stok.detail');
         Route::get('/mutasi-stok', [ReportController::class, 'mutasiStok'])->name('mutasi-stok');
         Route::get('/rekap-pembelian', [PurchaseController::class, 'rekapProduk'])->name('rekap-pembelian');
