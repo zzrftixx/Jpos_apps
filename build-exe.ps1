@@ -19,12 +19,13 @@
 # =============================================================================
 
 $ErrorActionPreference = "Stop"
+$env:UACS_OK = "1"
 
 $RootDir    = $PSScriptRoot
 $DistDir    = Join-Path $RootDir "dist"
 $TargetDir  = Join-Path $DistDir "JPOS_Portable"
 $StageDir   = Join-Path $DistDir "_staging"
-$PhpSource  = "D:\MAINSERVER\laragon\bin\php\php-8.5.8-Win32-vs17-x64"
+$PhpSource  = if (Test-Path "D:\MAINSERVER\laragon\bin\php\php-8.5.12-Win32-vs17-x64") { "D:\MAINSERVER\laragon\bin\php\php-8.5.12-Win32-vs17-x64" } else { "D:\MAINSERVER\laragon\bin\php\php-8.5.8-Win32-vs17-x64" }
 $CscPath    = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 
 $Version = (Get-Content (Join-Path $RootDir "VERSION") -Raw).Trim()

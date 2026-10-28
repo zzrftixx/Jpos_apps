@@ -919,10 +919,10 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
             </div>
 
             {{-- MODE LIST (Tabel Ringkas) --}}
-            <div x-show="viewMode === 'list'" class="card overflow-hidden mb-4 rounded-2xl border border-slate-200/80 shadow-2xs">
-                <div class="overflow-x-auto">
+            <div x-show="viewMode === 'list'" class="card overflow-hidden mb-4 rounded-2xl border border-slate-200/80 shadow-2xs flex-1 min-h-0 flex flex-col">
+                <div class="overflow-x-auto overflow-y-auto flex-1 min-h-0">
                     <table class="data-table w-full text-sm">
-                        <thead class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 sticky top-0 z-10">
                             <tr>
                                 <th class="py-2.5 px-3 text-left">Kode</th>
                                 <th class="py-2.5 px-3 text-left">Nama Produk</th>
