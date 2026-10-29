@@ -718,9 +718,29 @@ class LaporanEksporController extends Controller
                 DB::raw('COUNT(DISTINCT purchase_items.purchase_id) as jumlah_faktur'),
                 DB::raw('MAX(purchases.purchase_date) as tgl_faktur_terakhir')
             )
-            ->groupBy('purchase_items.product_id', 'nama_produk', 'barcode', 'sku', 'satuan_dasar', 'sisa_stok_toko')
-            ->orderByDesc('total_nominal')
-            ->get();
+            ->groupBy('purchase_items.product_id', 'nama_produk', 'barcode', 'sku', 'satuan_dasar', 'sisa_stok_toko');
+
+        $urut = $request->get('urut', 'terbaru');
+        switch ($urut) {
+            case 'nominal_desc':
+                $query->orderByDesc('total_nominal');
+                break;
+            case 'nominal_asc':
+                $query->orderBy('total_nominal');
+                break;
+            case 'qty_desc':
+                $query->orderByDesc('total_base_qty');
+                break;
+            case 'nama_asc':
+                $query->orderBy('nama_produk');
+                break;
+            case 'terbaru':
+            default:
+                $query->orderByDesc('tgl_faktur_terakhir')->orderByDesc('total_nominal');
+                break;
+        }
+
+        $items = $query->get();
 
         $baris = $items->map(fn ($p) => [
             'nama' => $p->nama_produk,

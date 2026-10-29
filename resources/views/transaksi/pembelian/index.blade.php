@@ -1104,6 +1104,15 @@ function pembelianApp(initialProducts = []) {
                         <option value="custom" {{ $rekapPeriode === 'custom' ? 'selected' : '' }}>Rentang Tanggal...</option>
                     </select>
 
+                    {{-- Filter Urutan / Sortir --}}
+                    <select name="urut" class="px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 bg-white text-slate-700 focus:border-brand-500 focus:outline-none shrink-0">
+                        <option value="terbaru" {{ ($rekapUrut ?? 'terbaru') === 'terbaru' ? 'selected' : '' }}>Urut: Terakhir Dibeli (Terbaru)</option>
+                        <option value="nominal_desc" {{ ($rekapUrut ?? '') === 'nominal_desc' ? 'selected' : '' }}>Urut: Nominal Terbesar</option>
+                        <option value="nominal_asc" {{ ($rekapUrut ?? '') === 'nominal_asc' ? 'selected' : '' }}>Urut: Nominal Terkecil</option>
+                        <option value="qty_desc" {{ ($rekapUrut ?? '') === 'qty_desc' ? 'selected' : '' }}>Urut: Kuantitas Terbanyak</option>
+                        <option value="nama_asc" {{ ($rekapUrut ?? '') === 'nama_asc' ? 'selected' : '' }}>Urut: Nama Produk (A-Z)</option>
+                    </select>
+
                     {{-- Rentang Tanggal Custom --}}
                     <div id="rekap-custom-dates" class="{{ $rekapPeriode === 'custom' ? '' : 'hidden' }} flex items-center gap-1.5 shrink-0">
                         <input type="date" name="from" value="{{ $rekapFrom }}" class="px-2.5 py-1.5 text-xs rounded-xl border border-slate-300 bg-white text-slate-700 focus:outline-none">
@@ -1117,7 +1126,7 @@ function pembelianApp(initialProducts = []) {
                         <span>Terapkan</span>
                     </button>
 
-                    @if(request()->filled('q') || request()->filled('supplier_id') || request()->filled('from') || (request()->filled('periode') && request('periode') !== 'bulan_ini'))
+                    @if(request()->filled('q') || request()->filled('supplier_id') || request()->filled('from') || (request()->filled('periode') && request('periode') !== 'bulan_ini') || (request()->filled('urut') && request('urut') !== 'terbaru'))
                         <a href="{{ route('pembelian.index', ['tab' => 'rekap_produk']) }}" class="btn btn-outline text-xs sm:text-sm py-2 px-3 text-slate-600 hover:text-slate-800">
                             Reset
                         </a>
@@ -1232,14 +1241,15 @@ function pembelianApp(initialProducts = []) {
                             <th class="py-3 px-4 text-center">Stok Toko Saat Ini</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        @forelse($rekapProduk as $index => $item)
-                        @php
-                            $satuanList = $rincianSatuanMap[$item->product_id] ?? [];
-                            $fakturList = $riwayatFakturMap[$item->product_id] ?? [];
-                            $avgPrice = $item->total_base_qty > 0 ? round($item->total_nominal / $item->total_base_qty, 2) : 0;
-                        @endphp
-                        <tr x-data="{ bukaFaktur: false }" class="hover:bg-slate-50/70 transition">
+                    @forelse($rekapProduk as $index => $item)
+                    @php
+                        $itemKey = $item->product_id ? (string) $item->product_id : ('nama_' . $item->nama_produk);
+                        $satuanList = $rincianSatuanMap[$itemKey] ?? [];
+                        $fakturList = $riwayatFakturMap[$itemKey] ?? [];
+                        $avgPrice = $item->total_base_qty > 0 ? round($item->total_nominal / $item->total_base_qty, 2) : 0;
+                    @endphp
+                    <tbody x-data="{ bukaFaktur: false }" class="border-b border-slate-100">
+                        <tr class="hover:bg-slate-50/70 transition">
                             <td class="py-3.5 px-3 text-center text-slate-400 text-xs">
                                 {{ $rekapProduk->firstItem() + $index }}
                             </td>
@@ -1307,7 +1317,7 @@ function pembelianApp(initialProducts = []) {
 
                         {{-- Accordion Rincian Faktur Supplier --}}
                         @if(count($fakturList) > 0)
-                        <tr x-show="bukaFaktur" x-cloak class="bg-brand-50/20 border-b border-slate-200">
+                        <tr x-show="bukaFaktur" x-cloak class="bg-brand-50/20 border-t border-slate-100">
                             <td colspan="8" class="py-3 px-6">
                                 <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs space-y-2">
                                     <div class="text-xs font-bold text-slate-700 flex items-center justify-between">
@@ -1346,7 +1356,9 @@ function pembelianApp(initialProducts = []) {
                             </td>
                         </tr>
                         @endif
-                        @empty
+                    </tbody>
+                    @empty
+                    <tbody>
                         <tr>
                             <td colspan="8" class="py-12 px-4 text-center">
                                 <div class="max-w-sm mx-auto space-y-2">
@@ -1356,8 +1368,8 @@ function pembelianApp(initialProducts = []) {
                                 </div>
                             </td>
                         </tr>
-                        @endforelse
                     </tbody>
+                    @endforelse
                 </table>
             </div>
             <div class="p-4 border-t border-slate-200">

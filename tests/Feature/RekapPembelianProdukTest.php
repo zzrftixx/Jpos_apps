@@ -340,4 +340,136 @@ class RekapPembelianProdukTest extends JposTestCase
         $response->assertOk();
         $this->assertStringContainsString('openxmlformats-officedocument.spreadsheetml.sheet', $response->headers->get('Content-Type') ?? '');
     }
+
+    public function test_rekap_pembelian_sortir_terbaru_dan_nominal(): void
+    {
+        $prodLama = $this->makeProduct(['name' => 'Barang Dibeli Kemarin']);
+        $prodBaru = $this->makeProduct(['name' => 'Barang Dibeli Hari Ini']);
+
+        // Faktur 1 (5 hari lalu, nominal besar Rp 2.000.000)
+        $p1 = Purchase::create([
+            'purchase_no' => 'PB-LAMA-01',
+            'purchase_date' => now()->subDays(5)->toDateString(),
+            'total' => 2000000,
+            'paid_amount' => 2000000,
+            'sisa_hutang' => 0,
+            'user_id' => $this->admin->id,
+        ]);
+        PurchaseItem::create([
+            'purchase_id' => $p1->id,
+            'product_id' => $prodLama->id,
+            'product_name' => $prodLama->name,
+            'qty' => 10,
+            'unit_label' => 'Pcs',
+            'unit_conversion' => 1,
+            'price' => 200000,
+            'subtotal' => 2000000,
+        ]);
+
+        // Faktur 2 (hari ini, nominal kecil Rp 50.000)
+        $p2 = Purchase::create([
+            'purchase_no' => 'PB-BARU-01',
+            'purchase_date' => now()->toDateString(),
+            'total' => 50000,
+            'paid_amount' => 50000,
+            'sisa_hutang' => 0,
+            'user_id' => $this->admin->id,
+        ]);
+        PurchaseItem::create([
+            'purchase_id' => $p2->id,
+            'product_id' => $prodBaru->id,
+            'product_name' => $prodBaru->name,
+            'qty' => 1,
+            'unit_label' => 'Pcs',
+            'unit_conversion' => 1,
+            'price' => 50000,
+            'subtotal' => 50000,
+        ]);
+
+        // Default / urut=terbaru: Barang yang dibeli hari ini (PB-BARU-01) harus di urutan pertama
+        $resTerbaru = $this->actingAs($this->admin)->get('/pembelian?tab=rekap_produk&periode=semua&urut=terbaru');
+        $resTerbaru->assertOk();
+        $itemsTerbaru = collect($resTerbaru->viewData('rekapProduk')->items());
+        $this->assertSame('Barang Dibeli Hari Ini', $itemsTerbaru->first()->nama_produk);
+
+        // Sortir urut=nominal_desc: Barang dengan nominal 2.000.000 harus di urutan pertama
+        $resNominal = $this->actingAs($this->admin)->get('/pembelian?tab=rekap_produk&periode=semua&urut=nominal_desc');
+        $resNominal->assertOk();
+        $itemsNominal = collect($resNominal->viewData('rekapProduk')->items());
+        $this->assertSame('Barang Dibeli Kemarin', $itemsNominal->first()->nama_produk);
+    }
+
+    public function test_rekap_pembelian_produk_dihapus_tetap_menampilkan_rincian_dan_faktur(): void
+    {
+        $supplier = Supplier::create(['name' => 'Supplier Arsip']);
+        $nota = Purchase::create([
+            'purchase_no' => 'PB-HAPUS-01',
+            'supplier_invoice_no' => 'INV-SUP-ARSIP-99',
+            'supplier_id' => $supplier->id,
+            'purchase_date' => now()->toDateString(),
+            'total' => 175000,
+            'paid_amount' => 175000,
+            'sisa_hutang' => 0,
+            'user_id' => $this->admin->id,
+        ]);
+
+        // Item tanpa product_id (misal produk master telah dihapus)
+        PurchaseItem::create([
+            'purchase_id' => $nota->id,
+            'product_id' => null,
+            'product_name' => 'Item Yang Terhapus',
+            'qty' => 5,
+            'unit_label' => 'Bungkus',
+            'unit_conversion' => 1,
+            'price' => 35000,
+            'subtotal' => 175000,
+        ]);
+
+        $res = $this->actingAs($this->admin)->get('/pembelian?tab=rekap_produk&periode=semua');
+        $res->assertOk();
+        $res->assertSee('Item Yang Terhapus');
+        $res->assertSee('175.000');
+        $res->assertSee('INV-SUP-ARSIP-99');
+
+        $rincianMap = $res->viewData('rincianSatuanMap');
+        $fakturMap = $res->viewData('riwayatFakturMap');
+
+        $this->assertArrayHasKey('nama_Item Yang Terhapus', $rincianMap);
+        $this->assertArrayHasKey('nama_Item Yang Terhapus', $fakturMap);
+        $this->assertCount(1, $fakturMap['nama_Item Yang Terhapus']);
+        $this->assertSame('INV-SUP-ARSIP-99', $fakturMap['nama_Item Yang Terhapus'][0]['supplier_invoice_no']);
+    }
+
+    public function test_rekap_pembelian_accordion_html_terstruktur_dalam_tbody(): void
+    {
+        $prod = $this->makeProduct(['name' => 'Whiskas Pouch Salmon']);
+        $nota = Purchase::create([
+            'purchase_no' => 'PB-ACC-01',
+            'supplier_invoice_no' => 'INV-SUP-ACC-11',
+            'purchase_date' => now()->toDateString(),
+            'total' => 10000,
+            'paid_amount' => 10000,
+            'sisa_hutang' => 0,
+            'user_id' => $this->admin->id,
+        ]);
+        PurchaseItem::create([
+            'purchase_id' => $nota->id,
+            'product_id' => $prod->id,
+            'product_name' => $prod->name,
+            'qty' => 1,
+            'unit_label' => 'Pouch',
+            'unit_conversion' => 1,
+            'price' => 10000,
+            'subtotal' => 10000,
+        ]);
+
+        $res = $this->actingAs($this->admin)->get('/pembelian?tab=rekap_produk');
+        $res->assertOk();
+
+        // Memastikan x-data berada pada tag <tbody> sehingga baris utama dan baris rincian berada di scope Alpine yang sama
+        $this->assertStringContainsString('<tbody x-data="{ bukaFaktur: false }"', $res->getContent());
+        $this->assertStringContainsString('bukaFaktur = !bukaFaktur', $res->getContent());
+        $this->assertStringContainsString('x-show="bukaFaktur"', $res->getContent());
+        $this->assertStringContainsString('INV-SUP-ACC-11', $res->getContent());
+    }
 }

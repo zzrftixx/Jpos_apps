@@ -126,8 +126,9 @@ class PurchaseController extends Controller
         ];
 
         // Paginated items terindeks per produk
+        $rekapUrut = $request->get('urut', 'terbaru');
         $rekapQuery = clone $baseRekapQuery;
-        $rekapProduk = $rekapQuery
+        $rekapSelect = $rekapQuery
             ->select(
                 'purchase_items.product_id',
                 DB::raw('COALESCE(products.name, purchase_items.product_name) as nama_produk'),
@@ -140,21 +141,59 @@ class PurchaseController extends Controller
                 DB::raw('COUNT(DISTINCT purchase_items.purchase_id) as jumlah_faktur'),
                 DB::raw('MAX(purchases.purchase_date) as tgl_faktur_terakhir')
             )
-            ->groupBy('purchase_items.product_id', 'nama_produk', 'barcode', 'sku', 'satuan_dasar', 'sisa_stok_toko')
-            ->orderByDesc('total_nominal')
+            ->groupBy('purchase_items.product_id', 'nama_produk', 'barcode', 'sku', 'satuan_dasar', 'sisa_stok_toko');
+
+        switch ($rekapUrut) {
+            case 'nominal_desc':
+                $rekapSelect->orderByDesc('total_nominal');
+                break;
+            case 'nominal_asc':
+                $rekapSelect->orderBy('total_nominal');
+                break;
+            case 'qty_desc':
+                $rekapSelect->orderByDesc('total_base_qty');
+                break;
+            case 'nama_asc':
+                $rekapSelect->orderBy('nama_produk');
+                break;
+            case 'terbaru':
+            default:
+                $rekapSelect->orderByDesc('tgl_faktur_terakhir')->orderByDesc('total_nominal');
+                break;
+        }
+
+        $rekapProduk = $rekapSelect
             ->paginate(20, ['*'], 'rekap_page')
             ->withQueryString();
 
         // Rincian satuan dan daftar faktur untuk item pada halaman aktif
-        $activeProductIds = collect($rekapProduk->items())->pluck('product_id')->filter()->unique();
+        $activeItems = collect($rekapProduk->items());
+        $activeProductIds = $activeItems->pluck('product_id')->filter()->unique()->values()->all();
+        $activeProductNamesWithoutId = $activeItems->whereNull('product_id')->pluck('nama_produk')->filter()->unique()->values()->all();
         $rincianSatuanMap = [];
         $riwayatFakturMap = [];
 
-        if ($activeProductIds->isNotEmpty()) {
+        if (!empty($activeProductIds) || !empty($activeProductNamesWithoutId)) {
             $detailItemsQuery = DB::table('purchase_items')
                 ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
-                ->leftJoin('suppliers', 'suppliers.id', '=', 'purchases.supplier_id')
-                ->whereIn('purchase_items.product_id', $activeProductIds);
+                ->leftJoin('suppliers', 'suppliers.id', '=', 'purchases.supplier_id');
+
+            $detailItemsQuery->where(function ($w) use ($activeProductIds, $activeProductNamesWithoutId) {
+                if (!empty($activeProductIds)) {
+                    $w->whereIn('purchase_items.product_id', $activeProductIds);
+                }
+                if (!empty($activeProductNamesWithoutId)) {
+                    if (!empty($activeProductIds)) {
+                        $w->orWhere(function ($sub) use ($activeProductNamesWithoutId) {
+                            $sub->whereNull('purchase_items.product_id')
+                                ->whereIn('purchase_items.product_name', $activeProductNamesWithoutId);
+                        });
+                    } else {
+                        $w->whereNull('purchase_items.product_id')
+                          ->whereIn('purchase_items.product_name', $activeProductNamesWithoutId);
+                    }
+                }
+            });
 
             if ($rekapFrom && $rekapTo) {
                 $detailItemsQuery->whereDate('purchases.purchase_date', '>=', $rekapFrom)
@@ -172,6 +211,7 @@ class PurchaseController extends Controller
             $rawDetails = $detailItemsQuery
                 ->select(
                     'purchase_items.product_id',
+                    'purchase_items.product_name',
                     'purchase_items.unit_label',
                     'purchase_items.unit_conversion',
                     'purchases.id as purchase_id',
@@ -186,7 +226,9 @@ class PurchaseController extends Controller
                 ->orderByDesc('purchases.purchase_date')
                 ->get();
 
-            foreach ($rawDetails->groupBy('product_id') as $pId => $items) {
+            foreach ($rawDetails->groupBy(function ($it) {
+                return $it->product_id ? (string) $it->product_id : ('nama_' . $it->product_name);
+            }) as $pKey => $items) {
                 $unitsGroup = [];
                 foreach ($items->groupBy('unit_label') as $uLabel => $uItems) {
                     $unitsGroup[] = [
@@ -196,9 +238,9 @@ class PurchaseController extends Controller
                         'total_subtotal' => (float) $uItems->sum('subtotal'),
                     ];
                 }
-                $rincianSatuanMap[$pId] = $unitsGroup;
+                $rincianSatuanMap[$pKey] = $unitsGroup;
 
-                $riwayatFakturMap[$pId] = $items->map(fn ($it) => [
+                $riwayatFakturMap[$pKey] = $items->map(fn ($it) => [
                     'purchase_id' => $it->purchase_id,
                     'purchase_no' => $it->purchase_no,
                     'supplier_invoice_no' => $it->supplier_invoice_no,
@@ -237,7 +279,7 @@ class PurchaseController extends Controller
         return view('transaksi.pembelian.index', compact(
             'purchases', 'ringkasan', 'suppliers', 'products',
             'rekapProduk', 'rekapRingkasan', 'rincianSatuanMap', 'riwayatFakturMap',
-            'rekapPeriode', 'rekapFrom', 'rekapTo'
+            'rekapPeriode', 'rekapFrom', 'rekapTo', 'rekapUrut'
         ));
     }
 
