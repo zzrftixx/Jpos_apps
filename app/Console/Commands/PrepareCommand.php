@@ -61,15 +61,12 @@ class PrepareCommand extends Command
             // tertahan sehari lagi jauh lebih ringan daripada kasir yang tidak bisa buka.
         }
 
-        // Katalog produk yang tersimpan bisa berasal dari versi aplikasi sebelumnya.
+        // Pemeliharaan berkas database SQLite & katalog produk
         try {
             $catalog->flush();
-            if (Schema::hasTable('cache')) {
-                DB::table('cache')->where('expiration', '<', now()->timestamp)->delete();
-                DB::statement('PRAGMA optimize');
-            }
+            \App\Support\SqliteMaintenance::runRoutines();
         } catch (\Throwable) {
-            // Cache kosong bukan alasan gagal start.
+            // Pemeliharaan gagal bukan alasan gagal start.
         }
 
         if (! $this->option('skip-cache')) {

@@ -46,20 +46,32 @@ class ProductCatalog
     private const CACHE_FINGERPRINT_KEY = 'jpos:katalog:fingerprint';
 
     /**
+     * Store cache yang dipakai untuk katalog produk.
+     * Menggunakan driver 'file' agar serialisasi blob katalog (1-2 MB) disimpan di flat file
+     * dan tidak mencemari tabel database.sqlite, tidak memicu freelist bloat, dan tidak
+     * membebani transaksi kasir.
+     */
+    private function store(): \Illuminate\Contracts\Cache\Repository
+    {
+        return Cache::store('file');
+    }
+
+    /**
      * Daftar produk aktif dalam bentuk siap pakai untuk keranjang belanja.
      */
     public function forCart(): array
     {
         $fingerprint = $this->fingerprint();
-        $cachedFingerprint = Cache::get(self::CACHE_FINGERPRINT_KEY);
+        $store = $this->store();
+        $cachedFingerprint = $store->get(self::CACHE_FINGERPRINT_KEY);
 
-        if ($cachedFingerprint === $fingerprint && Cache::has(self::CACHE_DATA_KEY)) {
-            return Cache::get(self::CACHE_DATA_KEY);
+        if ($cachedFingerprint === $fingerprint && $store->has(self::CACHE_DATA_KEY)) {
+            return $store->get(self::CACHE_DATA_KEY);
         }
 
         $data = $this->build();
-        Cache::put(self::CACHE_DATA_KEY, $data, self::TTL_SECONDS);
-        Cache::put(self::CACHE_FINGERPRINT_KEY, $fingerprint, self::TTL_SECONDS);
+        $store->put(self::CACHE_DATA_KEY, $data, self::TTL_SECONDS);
+        $store->put(self::CACHE_FINGERPRINT_KEY, $fingerprint, self::TTL_SECONDS);
 
         return $data;
     }
@@ -69,6 +81,8 @@ class ProductCatalog
      */
     public function flush(): void
     {
+        $this->store()->forget(self::CACHE_DATA_KEY);
+        $this->store()->forget(self::CACHE_FINGERPRINT_KEY);
         Cache::forget(self::CACHE_DATA_KEY);
         Cache::forget(self::CACHE_FINGERPRINT_KEY);
     }

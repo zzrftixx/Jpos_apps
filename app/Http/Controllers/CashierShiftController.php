@@ -205,6 +205,11 @@ class CashierShiftController extends Controller
         $shift->status = 'closed';
         $shift->save();
 
+        // Pemeliharaan rutin SQLite di background saat shift ditutup (checkpoint WAL & compact)
+        try {
+            \App\Support\SqliteMaintenance::runRoutines();
+        } catch (\Throwable) {}
+
         if ($request->wantsJson()) {
             return response()->json([
                 'success' => true,
@@ -229,7 +234,9 @@ class CashierShiftController extends Controller
             'address' => '',
             'phone' => '',
         ]);
+        $printerStruk = Setting::get('printer_struk', []);
+        $lebarCetak = \App\Support\Struk::lebarCetak($printerStruk);
 
-        return view('transaksi.shift.cetak', compact('shift', 'summary', 'storeProfile'));
+        return view('transaksi.shift.cetak', compact('shift', 'summary', 'storeProfile', 'printerStruk', 'lebarCetak'));
     }
 }

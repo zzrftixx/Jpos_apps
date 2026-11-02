@@ -4,29 +4,43 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rekap Shift #{{ $shift->id }} - {{ $shift->user->name ?? 'Kasir' }}</title>
+    @php
+        $lebarCetak = $lebarCetak ?? \App\Support\Struk::lebarCetak($printerStruk ?? []);
+        $fontSize = (int) ($printerStruk['font_size'] ?? 12);
+        $marginMm = max(0, (float) ($printerStruk['margin'] ?? 0));
+    @endphp
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        @page { size: {{ $lebarCetak }}mm auto; margin: 0; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Courier New', Courier, monospace, monospace;
-            font-size: 12px;
+            width: {{ $lebarCetak }}mm;
+            max-width: {{ $lebarCetak }}mm;
+            margin: 0 auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: {{ $fontSize }}px;
+            font-weight: 600;
             color: #000;
             background: #fff;
-            padding: 10px;
-            max-width: 320px; /* Standar struk thermal 58mm - 80mm */
-            margin: 0 auto;
+            padding: 4px {{ $marginMm }}mm;
+            box-sizing: border-box;
+            overflow-x: hidden;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
         .text-center { text-align: center; }
         .text-right { text-align: right; }
         .text-left { text-align: left; }
         .font-bold { font-weight: bold; }
-        .divider { border-bottom: 1px dashed #000; margin: 8px 0; }
-        .double-divider { border-bottom: 2px solid #000; margin: 8px 0; }
-        .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
-        .header { margin-bottom: 10px; }
-        .header h1 { font-size: 15px; font-weight: bold; margin-bottom: 2px; }
-        .header p { font-size: 10.5px; }
-        .title { font-size: 13px; font-weight: bold; margin: 6px 0; }
-        .section-title { font-size: 11px; font-weight: bold; margin-top: 6px; margin-bottom: 3px; text-transform: uppercase; }
+        .divider { border-bottom: 1px dashed #000; margin: 6px 0; }
+        .double-divider { border-bottom: 2px solid #000; margin: 6px 0; }
+        .row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+        .header { margin-bottom: 8px; }
+        .header h1 { font-size: {{ max(13, $fontSize + 2) }}px; font-weight: bold; margin-bottom: 2px; }
+        .header p { font-size: {{ max(9, $fontSize - 1.5) }}px; }
+        .title { font-size: {{ max(11, $fontSize) }}px; font-weight: bold; margin: 4px 0 2px; }
+        .section-title { font-size: {{ max(9, $fontSize - 1) }}px; font-weight: bold; margin-top: 6px; margin-bottom: 2px; text-transform: uppercase; }
         .badge { display: inline-block; padding: 2px 5px; font-size: 10px; font-weight: bold; border: 1px solid #000; }
         .btn-print {
             display: block;
@@ -41,11 +55,13 @@
             cursor: pointer;
             margin-bottom: 12px;
         }
-        .signature-box { margin-top: 20px; display: flex; justify-content: space-between; text-align: center; font-size: 10.5px; }
-        .signature-line { margin-top: 40px; border-top: 1px solid #000; width: 100px; }
+        .signature-box { margin-top: 16px; display: flex; justify-content: space-between; text-align: center; font-size: {{ max(9, $fontSize - 1.5) }}px; }
+        .signature-col { width: 45%; }
+        .signature-line { margin-top: 36px; border-top: 1px solid #000; width: 100%; }
+        .no-print { margin-bottom: 10px; }
         @media print {
             .no-print { display: none !important; }
-            body { padding: 0; }
+            body { padding: 4px {{ $marginMm }}mm; }
         }
     </style>
 </head>
@@ -204,12 +220,12 @@
     @endif
 
     <div class="signature-box">
-        <div>
+        <div class="signature-col">
             <div>Kasir</div>
             <div class="signature-line"></div>
             <div>{{ $shift->user->name ?? 'Kasir' }}</div>
         </div>
-        <div>
+        <div class="signature-col">
             <div>Supervisor / Owner</div>
             <div class="signature-line"></div>
             <div>( ..................... )</div>

@@ -412,4 +412,51 @@ class CashierShiftTest extends JposTestCase
         // Memastikan input starting_cash menggunakan step="any" agar browser tidak memblokir angka bulat seperti 100000 saat min="1"
         $this->assertMatchesRegularExpression('/name=["\']starting_cash["\'][^>]*step=["\']any["\']|step=["\']any["\'][^>]*name=["\']starting_cash["\']/', $response->getContent());
     }
+
+    public function test_cetak_slip_shift_menggunakan_aturan_page_size_auto_dan_lebar_cetak_termal(): void
+    {
+        // 1. Uji profil printer 58mm -> lebar kepala cetak 48mm
+        \App\Models\Setting::set('printer_struk', [
+            'paper_size' => 58,
+            'profile' => 'pos58',
+            'font_size' => 12,
+            'margin' => 0,
+        ]);
+
+        $shift = CashierShift::create([
+            'user_id' => $this->kasir->id,
+            'opened_at' => now()->subHours(8),
+            'closed_at' => now(),
+            'starting_cash' => 100000,
+            'actual_cash' => 100000,
+            'status' => 'closed',
+        ]);
+
+        $res58 = $this->actingAs($this->kasir)->get("/shift/{$shift->id}/print");
+        $res58->assertOk();
+        $html58 = $res58->getContent();
+
+        // Harus memiliki @page { size: 48mm auto; margin: 0; }
+        $this->assertStringContainsString('@page { size: 48mm auto; margin: 0; }', $html58);
+        $this->assertStringContainsString('width: 48mm;', $html58);
+        $this->assertStringContainsString('max-width: 48mm;', $html58);
+        $this->assertStringContainsString('window.print()', $html58);
+
+        // 2. Uji profil printer 80mm -> lebar kepala cetak 72mm
+        \App\Models\Setting::set('printer_struk', [
+            'paper_size' => 80,
+            'profile' => 'pos80',
+            'font_size' => 12,
+            'margin' => 2,
+        ]);
+
+        $res80 = $this->actingAs($this->kasir)->get("/shift/{$shift->id}/print");
+        $res80->assertOk();
+        $html80 = $res80->getContent();
+
+        // Harus memiliki @page { size: 72mm auto; margin: 0; }
+        $this->assertStringContainsString('@page { size: 72mm auto; margin: 0; }', $html80);
+        $this->assertStringContainsString('width: 72mm;', $html80);
+        $this->assertStringContainsString('padding: 4px 2mm;', $html80);
+    }
 }

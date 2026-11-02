@@ -457,23 +457,12 @@ class SettingController extends Controller
         $initialSize = (!$isMemory && file_exists($dbPath)) ? @filesize($dbPath) : 0;
 
         try {
-            // 1. Bersihkan cache aplikasi dan tabel cache database dari sisa cache usang
+            // 1. Bersihkan cache aplikasi & katalog
             Cache::flush();
-            if (\Illuminate\Support\Facades\Schema::hasTable('cache')) {
-                DB::table('cache')->delete();
-            }
-            if (\Illuminate\Support\Facades\Schema::hasTable('cache_locks')) {
-                DB::table('cache_locks')->delete();
-            }
-
-            // 2. Refresh cache katalog produk JPos agar bersih dan terbarui
             app(\App\Support\ProductCatalog::class)->flush();
 
-            // 3. Jalankan VACUUM dan optimasi indeks SQLite untuk merampingkan berkas fisik
-            if (DB::transactionLevel() === 0) {
-                DB::statement('VACUUM');
-            }
-            DB::statement('PRAGMA optimize');
+            // 2. Jalankan pemeliharaan komprehensif SQLite (WAL checkpoint, prune session >30 hari, cache cleanup, VACUUM, optimize)
+            \App\Support\SqliteMaintenance::runRoutines(true);
 
             clearstatcache();
             $finalSize = (!$isMemory && file_exists($dbPath)) ? @filesize($dbPath) : 0;
