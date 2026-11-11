@@ -15,6 +15,7 @@ use App\Http\Controllers\PromoController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\RackController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\RestaurantTableController;
 use App\Http\Controllers\ReturnController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SesiAplikasiController;
@@ -32,11 +33,28 @@ Route::middleware('guest')->group(function () {
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->name('logout');
 
 Route::redirect('/', '/dashboard');
+Route::redirect('/transaksi', '/kasir');
 
 // Penanda jendela aplikasi masih terbuka, dipakai JPOS.exe untuk tahu kapan server boleh
 // dimatikan. Tanpa autentikasi supaya halaman login pun ikut menahan server tetap hidup.
-Route::get('/jpos-detak', [SesiAplikasiController::class, 'detak'])->name('jpos.detak');
-Route::get('/jpos-tutup', [SesiAplikasiController::class, 'tutup'])->name('jpos.tutup');
+Route::get('/jpos-detak', [SesiAplikasiController::class, 'detak'])
+    ->name('jpos.detak')
+    ->withoutMiddleware([
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+    ]);
+Route::get('/jpos-tutup', [SesiAplikasiController::class, 'tutup'])
+    ->name('jpos.tutup')
+    ->withoutMiddleware([
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+    ]);
 
 Route::middleware('auth')->group(function () {
 
@@ -95,6 +113,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/scan', [KasirController::class, 'findByBarcode'])->name('scan');
         Route::post('/', [KasirController::class, 'store'])->name('store');
         Route::get('/receipt/{sale}', [KasirController::class, 'receipt'])->name('receipt');
+        Route::get('/receipt/{sale}/kitchen', [KasirController::class, 'kitchenReceipt'])->name('receipt.kitchen');
         // Jalur transaksi tertahan - terpisah dari pesanan DP, lihat migrasi 000340.
         Route::get('/tahan', [KasirController::class, 'tahanList'])->name('tahan');
         Route::post('/tahan/{sale}/ambil', [KasirController::class, 'ambilTahan'])->name('tahan.ambil');
@@ -122,6 +141,19 @@ Route::middleware('auth')->group(function () {
         Route::delete('/{promotion}', [PromoController::class, 'destroy'])->name('destroy');
         Route::post('/{promotion}/toggle', [PromoController::class, 'toggleActive'])->name('toggle');
         Route::get('/{promotion}/cetak-barcode', [PromoController::class, 'cetakBarcode'])->name('cetak-barcode');
+    });
+
+    // Pengelolaan Meja & Barcode Meja (Kasir & Pengaturan)
+    Route::middleware('menu:kasir,pengaturan')->prefix('kelola-meja')->name('meja.')->group(function () {
+        Route::get('/', [RestaurantTableController::class, 'index'])->name('index');
+        Route::post('/', [RestaurantTableController::class, 'store'])->name('store');
+        Route::put('/{meja}', [RestaurantTableController::class, 'update'])->name('update');
+        Route::delete('/{meja}', [RestaurantTableController::class, 'destroy'])->name('destroy');
+        Route::post('/quick-generate', [RestaurantTableController::class, 'quickGenerate'])->name('quick-generate');
+        Route::get('/cetak-barcode', [RestaurantTableController::class, 'printBarcodes'])->name('cetak-barcode');
+        Route::get('/{meja}/buka-kasir', [RestaurantTableController::class, 'loadToCashier'])->name('buka-kasir');
+        Route::get('/order/{sale}/buka-kasir', [RestaurantTableController::class, 'loadSaleToCashier'])->name('buka-order');
+        Route::get('/api/active-orders', [RestaurantTableController::class, 'activeOrders'])->name('active-orders');
     });
 
     // Shift Kasir
@@ -254,8 +286,33 @@ Route::middleware('auth')->group(function () {
 
 // Gambar produk & logo toko. Dua prefix dipertahankan karena keduanya sudah dipakai di
 // berbagai view (url('media/...') dan asset('storage/...')).
-Route::get('/media/{path}', [MediaController::class, 'show'])->where('path', '.*')->name('media');
-Route::get('/storage/{path}', [MediaController::class, 'show'])->where('path', '.*');
+Route::get('/media/{path}', [MediaController::class, 'show'])
+    ->where('path', '.*')
+    ->name('media')
+    ->withoutMiddleware([
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+    ]);
+Route::get('/storage/{path}', [MediaController::class, 'show'])
+    ->where('path', '.*')
+    ->withoutMiddleware([
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+    ]);
 
 // Rute Cepat untuk Aplikasi Kasir Tablet Android
 Route::get('/tablet', fn() => redirect('/tablet/index.html'))->name('tablet.index');
+
+// Pemesanan Mandiri Meja via Scan Barcode / QR Meja (Pelanggan)
+Route::prefix('meja')->name('meja.')->group(function () {
+    Route::get('/{code}', [RestaurantTableController::class, 'orderMenu'])->name('order');
+    Route::post('/{code}/order', [RestaurantTableController::class, 'submitOrder'])->name('order.submit');
+    Route::get('/{code}/pesanan/{sale}', [RestaurantTableController::class, 'orderStatus'])->name('order.status');
+});
+

@@ -34,13 +34,20 @@ class MediaController extends Controller
         }
 
         $mime = @mime_content_type($fullPath) ?: 'image/jpeg';
+        $mtime = @filemtime($fullPath) ?: 0;
+        $size = @filesize($fullPath) ?: 0;
+        $etag = md5($fullPath . '|' . $mtime . '|' . $size);
 
-        return response()->file($fullPath, [
+        $response = response()->file($fullPath, [
             'Content-Type' => $mime,
             // Gambar produk memakai nama file acak 40 karakter, jadi isinya tidak pernah
             // berubah untuk URL yang sama dan aman di-cache lama oleh browser.
             'Cache-Control' => 'public, max-age=604800',
         ]);
+        $response->setEtag($etag);
+        $response->isNotModified(request());
+
+        return $response;
     }
 
     /**

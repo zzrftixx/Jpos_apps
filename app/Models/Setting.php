@@ -75,12 +75,42 @@ class Setting extends Model
     }
 
     /**
-     * Tata letak Modul Kasir ('modern' / 'sederhana') yang diatur di Pengaturan > Tampilan Kasir.
-     * 'modern' (default): layout 2 panel modern JPOS (katalog di kiri, keranjang di kanan).
+     * Tata letak Modul Kasir ('modern' / 'klasik' / 'fnb') yang diatur di Pengaturan > Tampilan Kasir.
+     * 'modern' (default): Tampilan Kasir Modern 2 panel (katalog di kiri, keranjang di kanan).
+     * 'klasik': Modul Kasir Klasik layar penuh dengan tabel transaksi dan tombol bantuan cepat.
+     * 'fnb': Modul Kasir F&B (Resto/Cafe) dengan manajemen nomor meja, cetak struk dapur & pelanggan.
      */
     public static function kasirLayout(): string
     {
-        return 'modern';
+        $setting = self::get('kasir_display', ['layout' => 'modern', 'default_view' => 'gambar']);
+        $layout = $setting['layout'] ?? 'modern';
+
+        return in_array($layout, ['modern', 'klasik', 'fnb'], true) ? $layout : 'modern';
+    }
+
+    /**
+     * Mode pengelolaan stok produk untuk Modul Kasir F&B.
+     * 'per_product' (default): Fleksibel per produk (ada stok untuk minuman kemasan/barang fisik, tanpa stok untuk menu olahan dapur/racikan).
+     * 'all_nostock': Semua menu di kasir F&B tanpa batasan stok (mode dapur siap saji).
+     * 'all_stock': Semua menu di kasir F&B wajib ada stok fisik tercatat.
+     */
+    public static function fnbStockMode(): string
+    {
+        $produkMode = self::get('produk_mode', []);
+        if (!empty($produkMode['fnb_stock_mode'])) {
+            return in_array($produkMode['fnb_stock_mode'], ['per_product', 'all_nostock', 'all_stock'], true)
+                ? $produkMode['fnb_stock_mode']
+                : 'per_product';
+        }
+
+        $kasirDisplay = self::get('kasir_display', []);
+        if (!empty($kasirDisplay['fnb_stock_mode'])) {
+            return in_array($kasirDisplay['fnb_stock_mode'], ['per_product', 'all_nostock', 'all_stock'], true)
+                ? $kasirDisplay['fnb_stock_mode']
+                : 'per_product';
+        }
+
+        return 'per_product';
     }
 
     /**
@@ -165,5 +195,13 @@ class Setting extends Model
             'target_poin' => max(1, (int) ($setting['target_poin'] ?? 50)),
             'nilai_voucher' => max(1, (float) ($setting['nilai_voucher'] ?? 25000)),
         ];
+    }
+
+    /**
+     * Profil toko / restoran (nama, alamat, telepon, logo, footer).
+     */
+    public static function getStoreProfile(): array
+    {
+        return (array) self::get('store_profile', ['name' => 'JPOS Store']);
     }
 }

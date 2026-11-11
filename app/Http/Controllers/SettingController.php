@@ -528,24 +528,57 @@ class SettingController extends Controller
 
     public function tampilanKasir()
     {
-        $settings = Setting::get('kasir_display', ['default_view' => 'gambar']);
+        $settings = Setting::get('kasir_display', [
+            'layout' => 'modern',
+            'default_view' => 'gambar',
+            'fnb_stock_mode' => 'per_product',
+        ]);
+        $settings['fnb_stock_mode'] = Setting::fnbStockMode();
         return view('pengaturan.tampilan-kasir', compact('settings'));
     }
 
     public function updateTampilanKasir(Request $request)
     {
         $data = $request->validate([
-            'default_view' => ['required', 'in:gambar,list,both'],
+            'layout' => ['nullable', 'in:modern,klasik,fnb'],
+            'default_view' => ['nullable', 'in:gambar,list,both'],
+            'fnb_stock_mode' => ['nullable', 'in:per_product,all_nostock,all_stock'],
         ]);
+
+        if (empty($data['layout'])) {
+            $data['layout'] = 'modern';
+        }
+
+        $existing = Setting::get('kasir_display', [
+            'layout' => 'modern',
+            'default_view' => 'gambar',
+            'fnb_stock_mode' => 'per_product',
+        ]);
+
+        if (empty($data['default_view'])) {
+            $data['default_view'] = $existing['default_view'] ?? 'gambar';
+        }
+
+        if (empty($data['fnb_stock_mode'])) {
+            $data['fnb_stock_mode'] = $existing['fnb_stock_mode'] ?? Setting::fnbStockMode();
+        }
 
         Setting::set('kasir_display', $data);
 
-        return back()->with('success', 'Pengaturan tampilan kasir disimpan.');
+        // Sinkronisasi juga ke produk_mode agar konsisten
+        $pm = Setting::get('produk_mode', ['mode' => 'sederhana']);
+        $pm['fnb_stock_mode'] = $data['fnb_stock_mode'];
+        Setting::set('produk_mode', $pm);
+
+        app(\App\Support\ProductCatalog::class)->flush();
+
+        return back()->with('success', 'Pengaturan modul kasir berhasil disimpan.');
     }
 
     public function modeProduk()
     {
         $settings = Setting::get('produk_mode', ['mode' => 'sederhana']);
+        $settings['fnb_stock_mode'] = Setting::fnbStockMode();
         return view('pengaturan.mode-produk', compact('settings'));
     }
 
@@ -553,7 +586,10 @@ class SettingController extends Controller
     {
         $data = $request->validate([
             'mode' => ['required', 'in:sederhana,lengkap'],
+            'fnb_stock_mode' => ['nullable', 'in:per_product,all_nostock,all_stock'],
         ]);
+
+        $data['fnb_stock_mode'] = $request->input('fnb_stock_mode', 'per_product');
 
         // Mati secara bawaan. Toko sembako tidak pernah butuh grosir untuk jasa, dan dua kolom
         // yang tidak pernah diisi tetap menagih perhatian setiap kali produk baru dimasukkan.
@@ -561,6 +597,13 @@ class SettingController extends Controller
         $data['harga_kategori_pelanggan'] = $request->boolean('harga_kategori_pelanggan');
 
         Setting::set('produk_mode', $data);
+
+        // Sinkronisasi juga ke kasir_display agar konsisten
+        $kd = Setting::get('kasir_display', ['layout' => 'modern', 'default_view' => 'gambar']);
+        $kd['fnb_stock_mode'] = $data['fnb_stock_mode'];
+        Setting::set('kasir_display', $kd);
+
+        app(\App\Support\ProductCatalog::class)->flush();
 
         return back()->with('success', 'Pengaturan mode produk disimpan.');
     }

@@ -254,6 +254,9 @@
     @if($layout === 'tabel')
         {{-- Header ala nota tradisional: Kepada / NOTA NO. --}}
         <div>Kepada: {{ $sale->customer->name ?? 'Umum' }}</div>
+        @if(!empty($sale->table_no))
+        <div style="font-weight:bold;">Meja: {{ $sale->table_no }}</div>
+        @endif
         @if($templateStruk['show_cashier'] ?? true)
         <div>Kasir: {{ $sale->cashier->name ?? '-' }}</div>
         @endif
@@ -271,6 +274,9 @@
             </colgroup>
             <tr><td>No</td><td class="right">{{ $sale->invoice_no }}</td></tr>
             <tr><td>Tanggal</td><td class="right">{{ $sale->created_at->format('d/m/Y H:i') }}</td></tr>
+            @if(!empty($sale->table_no))
+            <tr style="font-weight:bold;"><td>Meja</td><td class="right">{{ $sale->table_no }}</td></tr>
+            @endif
             @if($templateStruk['show_cashier'] ?? true)
             <tr><td>Kasir</td><td class="right">{{ $sale->cashier->name ?? '-' }}</td></tr>
             @endif
@@ -354,6 +360,9 @@
     @else
         @foreach($sale->items as $item)
             <div class="item-name">{{ $item->product_name }}{{ $item->unit_label ? ' ('.$item->unit_label.')' : '' }}</div>
+            @if(!empty($item->note))
+                <div style="font-size:0.85em; font-style:italic; color:#333;">* {{ $item->note }}</div>
+            @endif
             <table style="border-bottom: 1px solid #000; margin-bottom: 3px; padding-bottom: 2px;">
                 <colgroup>
                     <col style="width: 62%;">

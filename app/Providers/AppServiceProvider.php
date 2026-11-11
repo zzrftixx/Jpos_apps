@@ -65,6 +65,10 @@ class AppServiceProvider extends ServiceProvider
      */
     private function profilToko(): array
     {
+        if (app()->runningUnitTests()) {
+            return (array) Setting::get('store_profile', []);
+        }
+
         if ($this->profilToko !== null) {
             return $this->profilToko;
         }

@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="jpos-detak-url" content="{{ route('jpos.detak', [], false) }}">
+    <meta name="jpos-tutup-url" content="{{ route('jpos.tutup', [], false) }}">
     <title>Login - {{ $storeProfile['name'] ?? 'JPOS by JaylaTech' }}</title>
-    <link rel="icon" type="image/png" href="{{ !empty($storeProfile['logo']) ? url('media/'.$storeProfile['logo']) : asset('images/logo-jpos.png') }}">
+    <link rel="icon" type="image/png" href="{{ !empty($storeProfile['logo']) ? route('media', ['path' => $storeProfile['logo']], false) : '' }}@if(empty($storeProfile['logo']))@aset('images/favicon.png')@endif">
     @include('partials.head-assets')
 </head>
 <body class="relative min-h-screen" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">

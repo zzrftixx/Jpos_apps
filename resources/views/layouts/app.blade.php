@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="jpos-detak-url" content="{{ route('jpos.detak', [], false) }}">
+    <meta name="jpos-tutup-url" content="{{ route('jpos.tutup', [], false) }}">
     <title>@yield('title', 'Dashboard') - {{ $storeProfile['name'] ?? 'JPOS by JaylaTech' }}</title>
-    <link rel="icon" type="image/png" href="{{ !empty($storeProfile['logo']) ? url('media/'.$storeProfile['logo']) : asset('images/logo-jpos.png') }}">
+    <link rel="icon" type="image/png" href="{{ !empty($storeProfile['logo']) ? route('media', ['path' => $storeProfile['logo']], false) : '' }}@if(empty($storeProfile['logo']))@aset('images/favicon.png')@endif">
 
     @include('partials.head-assets')
     <style>
@@ -115,6 +117,7 @@
                 @endif
             </a>
             <a href="{{ route('barcode.index') }}" class="nav-link {{ request()->routeIs('barcode.*') ? 'nav-active' : '' }}"><x-icon.barcode /> Cetak Barcode</a>
+            <a href="{{ route('meja.index') }}" class="nav-link {{ request()->routeIs('meja.*') ? 'nav-active' : '' }}"><x-icon.store /> Barcode Meja (F&amp;B)</a>
             <a href="{{ route('promo.index') }}" class="nav-link {{ request()->routeIs('promo.*') ? 'nav-active' : '' }}"><x-icon.percent /> Promo Produk</a>
             @endif
             @if($u->can_access('retur'))
@@ -178,6 +181,7 @@
             <a href="{{ route('pengaturan.printer-struk') }}" class="nav-link {{ request()->routeIs('pengaturan.printer-struk') ? 'nav-active' : '' }}"><x-icon.printer /> Printer Struk</a>
             <a href="{{ route('pengaturan.printer-barcode') }}" class="nav-link {{ request()->routeIs('pengaturan.printer-barcode') ? 'nav-active' : '' }}"><x-icon.printer /> Printer Barcode</a>
             <a href="{{ route('pengaturan.template-barcode') }}" class="nav-link {{ request()->routeIs('pengaturan.template-barcode') ? 'nav-active' : '' }}"><x-icon.barcode /> Template Barcode</a>
+            <a href="{{ route('meja.index') }}" class="nav-link {{ request()->routeIs('meja.*') ? 'nav-active' : '' }}"><x-icon.store /> Barcode Meja (F&amp;B)</a>
             <a href="{{ route('pengaturan.template-struk') }}" class="nav-link {{ request()->routeIs('pengaturan.template-struk') ? 'nav-active' : '' }}"><x-icon.receipt /> Template Struk</a>
             <a href="{{ route('pengaturan.pajak') }}" class="nav-link {{ request()->routeIs('pengaturan.pajak') ? 'nav-active' : '' }}"><x-icon.percent /> Pajak</a>
             <a href="{{ route('pengaturan.poin-loyalitas') }}" class="nav-link {{ request()->routeIs('pengaturan.poin-loyalitas') ? 'nav-active' : '' }}"><x-icon.star /> Poin &amp; Loyalitas</a>
@@ -483,7 +487,10 @@
             </div>
         </div>
     </div>
-</div>
+@auth
+    {{-- Notifikasi Real-time Pesanan Masuk via Barcode Meja --}}
+    @include('transaksi.kasir.partials.notifikasi-pesanan-meja')
+@endauth
 
 @stack('scripts')
 </body>

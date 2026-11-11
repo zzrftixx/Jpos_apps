@@ -116,12 +116,12 @@
         currentTarget = url;
         if (hoverTimer) clearTimeout(hoverTimer);
 
-        // 65ms debounce untuk menyaring gerakan mouse cepat tanpa menahan klik nyata
+        // 120ms debounce untuk menyaring gerakan mouse cepat sebelum prefetch
         hoverTimer = setTimeout(function () {
             if (currentTarget === url) {
                 prefetchUrl(url);
             }
-        }, 65);
+        }, 120);
     }
 
     function handlePointerLeave(e) {
@@ -132,26 +132,19 @@
         currentTarget = null;
     }
 
-    function handlePointerDown(e) {
-        var anchor = e.target && e.target.closest ? e.target.closest('a') : null;
-        var url = isEligibleLink(anchor);
-        if (url) {
-            prefetchUrl(url);
-        }
-    }
-
-    // Pre-warm menu utama saat idle (prioritas rendah)
+    // Pre-warm maksimal 1 menu prioritas saat idle agar tidak membanjiri jaringan LAN
     function prewarmSidebar() {
+        if (navigator.connection && navigator.connection.saveData) return;
+
         var nav = document.querySelector('[data-sidebar-nav]');
         if (!nav) return;
 
         var links = nav.querySelectorAll('a');
-        var count = 0;
-        for (var i = 0; i < links.length && count < 5; i++) {
+        for (var i = 0; i < links.length; i++) {
             var url = isEligibleLink(links[i]);
             if (url) {
                 prefetchUrl(url);
-                count++;
+                break;
             }
         }
     }
@@ -159,14 +152,12 @@
     function init() {
         document.addEventListener('pointerenter', handlePointerEnter, { capture: true, passive: true });
         document.addEventListener('pointerleave', handlePointerLeave, { capture: true, passive: true });
-        document.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: true });
-        document.addEventListener('touchstart', handlePointerDown, { capture: true, passive: true });
 
-        // Prewarm saat browser idle setelah halaman pertama termuat
+        // Prewarm ringan saat browser benar-benar idle setelah halaman selesai dimuat
         if (typeof window.requestIdleCallback === 'function') {
-            window.requestIdleCallback(prewarmSidebar, { timeout: 2000 });
+            window.requestIdleCallback(prewarmSidebar, { timeout: 3500 });
         } else {
-            setTimeout(prewarmSidebar, 1200);
+            setTimeout(prewarmSidebar, 3500);
         }
     }
 

@@ -57,6 +57,37 @@
                     <span class="block text-xs text-slate-400 mt-1">Dibiarkan mati, form Jasa tetap sesederhana sekarang.</span>
                 </span>
             </label>
+        {{-- PENGATURAN PRODUK KHUSUS MODUL KASIR F&B --}}
+        <div class="border-t border-slate-200 pt-4 mt-4 space-y-3">
+            <div class="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                <span>🍽️ Modul Kasir F&B (Resto &amp; Cafe)</span>
+            </div>
+            <p class="text-xs text-slate-500 mb-2 leading-relaxed">
+                Pengaturan pengelolaan stok produk untuk kasir mode F&B. Menu masakan olahan dapur atau minuman racikan dapat diset tanpa batasan stok fisik, sedangkan produk kemasan fisik tetap dapat dipantau stoknya.
+            </p>
+            <div class="space-y-2.5">
+                <label class="flex items-start gap-3 border rounded-lg px-4 py-3 cursor-pointer hover:bg-slate-50 {{ ($settings['fnb_stock_mode'] ?? 'per_product') == 'per_product' ? 'border-amber-500 bg-amber-50/30' : '' }}">
+                    <input type="radio" name="fnb_stock_mode" value="per_product" class="mt-1" {{ ($settings['fnb_stock_mode'] ?? 'per_product') == 'per_product' ? 'checked' : '' }}>
+                    <span>
+                        <span class="block font-medium text-sm">✨ Fleksibel per Produk (Bisa Ada Stok &amp; Bisa Tanpa Stok)</span>
+                        <span class="block text-xs text-slate-400 mt-0.5">Rekomendasi. Status stok diatur pada masing-masing produk (di Master Produk): makanan olahan dapur bisa diset <em>Tanpa Stok</em> (unlimited), sedangkan minuman botol/kaleng atau kemasan bisa diset <em>Ada Stok</em> fisik.</span>
+                    </span>
+                </label>
+                <label class="flex items-start gap-3 border rounded-lg px-4 py-3 cursor-pointer hover:bg-slate-50 {{ ($settings['fnb_stock_mode'] ?? 'per_product') == 'all_nostock' ? 'border-amber-500 bg-amber-50/30' : '' }}">
+                    <input type="radio" name="fnb_stock_mode" value="all_nostock" class="mt-1" {{ ($settings['fnb_stock_mode'] ?? 'per_product') == 'all_nostock' ? 'checked' : '' }}>
+                    <span>
+                        <span class="block font-medium text-sm">🍳 Semua Menu Tanpa Stok (Mode Dapur Siap Saji)</span>
+                        <span class="block text-xs text-slate-400 mt-0.5">Semua transaksi di kasir F&B tidak membatasi dan tidak memotong stok inventori. Sangat praktis untuk cafe/resto yang membuat seluruh menu langsung sesuai pesanan.</span>
+                    </span>
+                </label>
+                <label class="flex items-start gap-3 border rounded-lg px-4 py-3 cursor-pointer hover:bg-slate-50 {{ ($settings['fnb_stock_mode'] ?? 'per_product') == 'all_stock' ? 'border-amber-500 bg-amber-50/30' : '' }}">
+                    <input type="radio" name="fnb_stock_mode" value="all_stock" class="mt-1" {{ ($settings['fnb_stock_mode'] ?? 'per_product') == 'all_stock' ? 'checked' : '' }}>
+                    <span>
+                        <span class="block font-medium text-sm">📦 Semua Menu Wajib Ada Stok</span>
+                        <span class="block text-xs text-slate-400 mt-0.5">Setiap menu di kasir F&B wajib memiliki stok fisik yang mencukupi dan stok akan selalu dipotong saat transaksi.</span>
+                    </span>
+                </label>
+            </div>
         </div>
 
         <button class="btn btn-primary">Simpan</button>

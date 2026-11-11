@@ -56,6 +56,7 @@ class ProductController extends Controller
         $categories = Category::orderBy('name')->get();
         $suppliers = Supplier::orderBy('name')->get();
         $units = Unit::orderBy('name')->get();
+        Setting::preload(['produk_mode']);
         $produkMode = Setting::produkMode();
 
         // Fitur lanjutan: grosir untuk produk Jasa & Harga per Kategori Pelanggan (Pengaturan > Mode Produk).
@@ -176,7 +177,7 @@ class ProductController extends Controller
             $this->syncUnits($product, $unitsInput);
             $this->simpanLokasiRak($product, $request);
 
-            if ($product->stock > 0) {
+            if ($product->track_stock && $product->stock > 0) {
                 StockMovement::create([
                     'product_id' => $product->id,
                     'type' => 'in',
@@ -230,17 +231,19 @@ class ProductController extends Controller
             // penjualan bisa menyimpan sisa float sekecil 1e-15, dan tanpa pembulatan itu
             // terbaca sebagai "stok berubah" lalu mencatat penyesuaian palsu setiap kali
             // produk disimpan ulang tanpa diubah sama sekali.
-            $selisih = Angka::bulat($data['stock'] - $oldStock);
+            if ($product->track_stock) {
+                $selisih = Angka::bulat($data['stock'] - $oldStock);
 
-            if ($selisih != 0) {
-                StockMovement::create([
-                    'product_id' => $product->id,
-                    'type' => 'adjustment',
-                    'qty' => $selisih,
-                    'stock_after' => Angka::bulat($data['stock']),
-                    'note' => 'Penyesuaian manual stok produk',
-                    'user_id' => $request->user()->id,
-                ]);
+                if ($selisih != 0) {
+                    StockMovement::create([
+                        'product_id' => $product->id,
+                        'type' => 'adjustment',
+                        'qty' => $selisih,
+                        'stock_after' => Angka::bulat($data['stock']),
+                        'note' => 'Penyesuaian manual stok produk',
+                        'user_id' => $request->user()->id,
+                    ]);
+                }
             }
         });
 
@@ -485,9 +488,22 @@ class ProductController extends Controller
             'units.*.allow_decimal' => ['nullable', 'boolean'],
             'units.*.wholesale_price' => ['nullable', 'numeric', 'min:0'],
             'units.*.wholesale_min_qty' => ['nullable', 'integer', 'min:2'],
+            'track_stock' => ['nullable', 'boolean'],
             // numeric, bukan integer: stok barang timbangan wajar bernilai pecahan
             // (mis. sisa 9,6 Kg setelah menjual 400 Gram).
-            'stock' => ['required_if:type,barang', 'nullable', 'numeric', 'min:0'],
+            // Jika track_stock nonaktif (menu tanpa stok / dapur), stok tidak wajib diisi.
+            'stock' => [
+                'nullable',
+                'numeric',
+                'min:0',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->input('type') === 'barang' && $request->boolean('track_stock', true)) {
+                        if ($value === null || $value === '') {
+                            $fail('Kolom stok wajib diisi untuk barang dengan kelola stok.');
+                        }
+                    }
+                },
+            ],
             'initial_stock' => ['nullable', 'numeric'],
             'min_stock' => ['nullable', 'numeric', 'min:0'],
             'is_active' => ['nullable', 'boolean'],
@@ -502,6 +518,7 @@ class ProductController extends Controller
         $this->periksaBarcodeProdukTidakMenabrakSatuan($request, $ignoreId);
         $this->periksaBarcodeUnik($request, $ignoreId);
 
+        $data['track_stock'] = $request->boolean('track_stock', true);
         $data['is_active'] = $request->boolean('is_active', true);
         // Default true mempertahankan perilaku lama: sebelum ada opsi ini di form,
         // semua produk otomatis kena pajak.
@@ -522,6 +539,7 @@ class ProductController extends Controller
         $grosirJasa = (bool) (Setting::get('produk_mode', [])['grosir_jasa'] ?? false);
 
         if ($data['type'] === 'jasa') {
+            $data['track_stock'] = false;
             $data['stock'] = 0;
             $data['min_stock'] = 0;
 
@@ -533,7 +551,12 @@ class ProductController extends Controller
             $data['hpp_calc_enabled'] = false;
             $data['units'] = [];
         } else {
-            $data['min_stock'] = $data['min_stock'] ?? 0;
+            if (! $data['track_stock']) {
+                $data['stock'] = 0;
+                $data['min_stock'] = 0;
+            } else {
+                $data['min_stock'] = $data['min_stock'] ?? 0;
+            }
         }
 
         // Mematikan toggle Multi Satuan harus benar-benar membuang satuannya di server juga.

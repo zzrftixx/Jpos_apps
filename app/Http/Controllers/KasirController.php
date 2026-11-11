@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Product;
 use App\Models\ProductUnit;
+use App\Models\RestaurantTable;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SalePayment;
@@ -36,9 +37,9 @@ class KasirController extends Controller
             ? $this->filteredCatalog($request)
             : $catalog->forCart();
 
-        $categories = Category::orderBy('name')->get();
-        $customers = Customer::orderBy('name')->get();
-        Setting::preload(['tax', 'kasir_display', 'template_struk', 'shift_kasir', 'cash_drawer', 'default_starting_cash', 'poin_loyalitas']);
+        $categories = Category::orderBy('name')->get(['id', 'name']);
+        $customers = Customer::orderBy('name')->get(['id', 'name', 'phone', 'customer_type', 'points']);
+        Setting::preload(['tax', 'kasir_display', 'template_struk', 'shift_kasir', 'cash_drawer', 'default_starting_cash', 'poin_loyalitas', 'produk_mode', 'store_profile', 'kasir_layout', 'fnb_stock_mode']);
         $tax = Setting::get('tax', ['enabled' => false, 'percent' => 0, 'include_in_price' => false]);
         ['view' => $defaultView, 'toggle' => $allowToggle] = Setting::kasirDisplayMode();
 
@@ -64,6 +65,8 @@ class KasirController extends Controller
         $keranjangDiambil = session('kasir_keranjang_diambil');
         $customerDiambil = session('kasir_customer_id');
         $discountDiambil = session('kasir_discount');
+        $tableNoDiambil = session('kasir_table_no');
+        $noteDiambil = session('kasir_note');
         $jumlahTertahan = Sale::tertahan()->count();
         $jumlahPesanan = Sale::pesanan()->count();
 
@@ -87,11 +90,36 @@ class KasirController extends Controller
         $activeShift = $shiftKasirEnabled ? CashierShift::getActiveShift($request->user()->id) : null;
         $defaultStartingCash = Setting::defaultStartingCash();
         $poinLoyalitas = Setting::poinLoyalitas();
+        $kasirLayout = $request->query('layout', Setting::kasirLayout());
+        $nextInvoiceNo = in_array($kasirLayout, ['klasik', 'fnb']) ? Sale::generateInvoiceNo() : null;
 
-        return view('transaksi.kasir.index', compact(
+        $fnbTables = [];
+        $waitingByTable = [];
+        if ($kasirLayout === 'fnb') {
+            $fnbTables = RestaurantTable::active()->orderBy('sort_order')->orderBy('name')->get();
+            if ($fnbTables->isEmpty() && RestaurantTable::count() === 0) {
+                RestaurantTable::seedDefaultTablesIfEmpty();
+                $fnbTables = RestaurantTable::active()->orderBy('sort_order')->orderBy('name')->get();
+            }
+            $waitingByTable = Sale::where('order_status', 'waiting')
+                ->whereNotNull('table_no')
+                ->select('table_no', DB::raw('count(*) as count'))
+                ->groupBy('table_no')
+                ->pluck('count', 'table_no')
+                ->all();
+        }
+
+        $viewName = match ($kasirLayout) {
+            'klasik' => 'transaksi.kasir.klasik',
+            'fnb' => 'transaksi.kasir.fnb',
+            default => 'transaksi.kasir.index',
+        };
+
+        return view($viewName, compact(
             'categories', 'customers', 'tax', 'productsForCart', 'defaultView', 'allowToggle',
-            'keranjangDiambil', 'customerDiambil', 'discountDiambil', 'jumlahTertahan', 'jumlahPesanan', 'pilihDokumen', 'dokumenDefault',
-            'topProductIds', 'activeShift', 'shiftKasirEnabled', 'cashDrawerEnabled', 'shiftKasirSettings', 'defaultStartingCash', 'poinLoyalitas'
+            'keranjangDiambil', 'customerDiambil', 'discountDiambil', 'tableNoDiambil', 'noteDiambil', 'jumlahTertahan', 'jumlahPesanan', 'pilihDokumen', 'dokumenDefault',
+            'topProductIds', 'activeShift', 'shiftKasirEnabled', 'cashDrawerEnabled', 'shiftKasirSettings', 'defaultStartingCash', 'poinLoyalitas',
+            'kasirLayout', 'nextInvoiceNo', 'fnbTables', 'waitingByTable'
         ));
     }
 
@@ -277,6 +305,8 @@ class KasirController extends Controller
             'is_parked' => ['nullable', 'boolean'],
             'due_date' => ['nullable', 'date'],
             'note' => ['nullable', 'string'],
+            'table_no' => ['nullable', 'string', 'max:50'],
+            'items.*.note' => ['nullable', 'string', 'max:255'],
         ]);
 
         // Transaksi tertahan adalah waiting list juga - mesinnya sama persis. Yang
@@ -284,8 +314,9 @@ class KasirController extends Controller
         // seluruh pembukuan yang sudah benar tidak perlu disentuh. Lihat migrasi 000340.
         $isParked = $request->boolean('is_parked');
         $isWaitingList = $isParked || $request->boolean('is_waiting_list');
+        $kasirLayout = $request->input('layout') ?? ($request->filled('table_no') ? 'fnb' : Setting::kasirLayout());
 
-        $sale = DB::transaction(function () use ($data, $request, $isWaitingList, $isParked) {
+        $sale = DB::transaction(function () use ($data, $request, $isWaitingList, $isParked, $kasirLayout) {
             $subtotal = 0;
             $taxable = 0;
             $lineItems = [];
@@ -315,8 +346,8 @@ class KasirController extends Controller
 
                 $qtyInBaseUnits = Angka::keSatuanDasar($qty, $unitConversion);
 
-                // Produk jasa tidak punya stok fisik, jadi tidak pernah divalidasi/dipotong.
-                if (!$product->isJasa()) {
+                // Produk jasa atau produk tanpa stok tidak punya batasan stok fisik, jadi tidak divalidasi/dipotong.
+                if ($product->tracksStock($kasirLayout)) {
                     // Diakumulasi per produk supaya 2 baris produk yang sama (mis. sebagian PCS,
                     // sebagian DUS) tetap divalidasi terhadap total stok yang sama, bukan dicek terpisah.
                     //
@@ -346,6 +377,7 @@ class KasirController extends Controller
                     'unit_conversion' => $unitConversion,
                     'price' => $unitPrice,
                     'subtotal' => $lineSubtotal,
+                    'note' => $item['note'] ?? null,
                 ];
             }
 
@@ -436,6 +468,7 @@ class KasirController extends Controller
                 'due_date' => $data['due_date'] ?? null,
                 'parked_at' => $isParked ? now() : null,
                 'note' => $data['note'] ?? null,
+                'table_no' => $data['table_no'] ?? null,
                 'points_earned' => $pointsEarned,
                 'points_redeemed' => $pointsRedeemed,
                 'points_discount' => $pointsDiscount,
@@ -446,6 +479,7 @@ class KasirController extends Controller
                     'sale_id' => $sale->id,
                     'product_id' => $li['product']->id,
                     'product_name' => $li['product']->name,
+                    'note' => $li['note'] ?? null,
                     'price' => $li['price'],
                     // Harga modal dibekukan di sini. Tanpa ini, memperbarui harga modal
                     // produk akan mengubah laba seluruh bulan lampau.
@@ -456,7 +490,7 @@ class KasirController extends Controller
                     'subtotal' => $li['subtotal'],
                 ]);
 
-                if (!$li['product']->isJasa()) {
+                if ($li['product']->tracksStock($kasirLayout)) {
                     // Stock is reserved immediately, even for waiting-list orders,
                     // so the same item can't be oversold while the order is pending.
                     // Stok selalu dikurangi dalam satuan dasar, meskipun qty di atas dalam satuan besar.
@@ -491,7 +525,18 @@ class KasirController extends Controller
             return $sale;
         });
 
-        return response()->json(['success' => true, 'sale_id' => $sale->id, 'receipt_url' => route('kasir.receipt', $sale->id, false)]);
+        return response()->json([
+            'success' => true,
+            'sale_id' => $sale->id,
+            'invoice_no' => $sale->invoice_no,
+            'table_no' => $sale->table_no,
+            'total' => (float) $sale->total,
+            'paid_amount' => (float) $sale->paid_amount,
+            'change_amount' => (float) $sale->change_amount,
+            'payment_method' => $sale->payment_method,
+            'receipt_url' => route('kasir.receipt', $sale->id, false),
+            'kitchen_receipt_url' => route('kasir.receipt.kitchen', $sale->id, false),
+        ]);
     }
 
     /**
@@ -544,6 +589,7 @@ class KasirController extends Controller
         $customerId = $sale->customer_id;
         $discount = (float) $sale->discount;
         $note = $sale->note;
+        $tableNo = $sale->table_no;
 
         // cancelWaiting() yang sudah ada: mengunci baris, memeriksa ulang status di dalam
         // transaksi, mengembalikan stok, dan mencatat StockMovement-nya (H2, H3, H4).
@@ -555,6 +601,7 @@ class KasirController extends Controller
             ->with('kasir_customer_id', $customerId)
             ->with('kasir_discount', $discount)
             ->with('kasir_note', $note)
+            ->with('kasir_table_no', $tableNo)
             ->with('success', 'Transaksi ' . $sale->invoice_no . ' diambil kembali. Silakan lanjutkan.');
     }
 
@@ -678,12 +725,26 @@ class KasirController extends Controller
         });
 
         if (! $sale) {
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => 'Pesanan ini bukan waiting list yang aktif.'], 422);
+            }
             return back()->with('error', 'Pesanan ini bukan waiting list yang aktif.');
         }
 
-        return back()->with('success', $sale->order_status === 'completed'
+        $pesan = $sale->order_status === 'completed'
             ? "Pesanan {$sale->invoice_no} telah lunas dan selesai."
-            : "Pembayaran tambahan untuk {$sale->invoice_no} berhasil disimpan.");
+            : "Pembayaran tambahan untuk {$sale->invoice_no} berhasil disimpan.";
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $pesan,
+                'order_status' => $sale->order_status,
+                'receipt_url' => route('kasir.receipt', $sale->id),
+            ]);
+        }
+
+        return back()->with('success', $pesan);
     }
 
     public function cancelWaiting(Sale $sale)
@@ -704,7 +765,7 @@ class KasirController extends Controller
             foreach ($sale->items as $item) {
                 if ($item->product_id) {
                     $product = Product::lockForUpdate()->find($item->product_id);
-                    if ($product && !$product->isJasa()) {
+                    if ($product && $product->tracksStock($sale->table_no ? 'fnb' : null)) {
                         // qty tersimpan dalam satuan jual aslinya (mis. dus); dikonversi ke satuan
                         // dasar (mis. pcs) dulu sebelum menambah stok.
                         $baseUnits = Angka::keSatuanDasar($item->qty, $item->unit_conversion);
@@ -784,7 +845,7 @@ class KasirController extends Controller
                     }
 
                     $product = Product::lockForUpdate()->find($item->product_id);
-                    if (! $product || $product->isJasa()) {
+                    if (! $product || ! $product->tracksStock($sale->table_no ? 'fnb' : null)) {
                         continue;
                     }
 
@@ -916,7 +977,7 @@ class KasirController extends Controller
             foreach ($sale->items as $oldItem) {
                 if ($oldItem->product_id) {
                     $product = Product::lockForUpdate()->find($oldItem->product_id);
-                    if ($product && !$product->isJasa()) {
+                    if ($product && $product->tracksStock($sale->table_no ? 'fnb' : null)) {
                         $baseUnits = Angka::keSatuanDasar($oldItem->qty, $oldItem->unit_conversion);
                         $stockAfter = $product->ubahStok($baseUnits);
                         StockMovement::create([
@@ -955,7 +1016,7 @@ class KasirController extends Controller
 
                 $qtyInBaseUnits = Angka::keSatuanDasar($qty, $unitConversion);
 
-                if (!$product->isJasa()) {
+                if ($product->tracksStock($sale->table_no ? 'fnb' : null)) {
                     $requestedBaseUnitsByProduct[$productId] = Angka::bulat(
                         $requestedBaseUnitsByProduct[$productId] + $qtyInBaseUnits
                     );
@@ -983,7 +1044,7 @@ class KasirController extends Controller
                     'subtotal' => $lineSubtotal,
                 ]);
 
-                if (!$product->isJasa()) {
+                if ($product->tracksStock($sale->table_no ? 'fnb' : null)) {
                     $stockAfter = $product->ubahStok(-$qtyInBaseUnits);
 
                     StockMovement::create([
@@ -1045,6 +1106,10 @@ class KasirController extends Controller
      */
     public function receipt(Request $request, Sale $sale)
     {
+        if ($request->query('dokumen') === 'kitchen') {
+            return $this->kitchenReceipt($request, $sale);
+        }
+
         // 'payments' ikut dimuat: struk merinci tiap penerimaan uang (DP tunai, lunas QRIS).
         $sale->load(['items', 'customer', 'cashier', 'payments']);
         $storeProfile = Setting::get('store_profile', []);
@@ -1109,5 +1174,20 @@ class KasirController extends Controller
         }
 
         return $tersimpan;
+    }
+
+    /**
+     * Cetak Struk Pesanan Dapur / Kitchen Order Ticket (KOT) khusus mode F&B.
+     */
+    public function kitchenReceipt(Request $request, Sale $sale)
+    {
+        $sale->load(['items', 'customer', 'cashier']);
+        $storeProfile = Setting::get('store_profile', []);
+        $printerStruk = Setting::get('printer_struk', ['paper_size' => 80, 'margin' => 0, 'font_size' => 12]);
+        $lebarCetak = \App\Support\Struk::lebarCetak($printerStruk);
+
+        return response()
+            ->view('transaksi.kasir.kitchen-receipt', compact('sale', 'storeProfile', 'printerStruk', 'lebarCetak'))
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
     }
 }

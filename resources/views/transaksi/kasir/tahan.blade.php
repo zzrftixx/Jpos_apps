@@ -40,9 +40,16 @@
                 {{-- Aksen indikator status atas --}}
                 <div class="h-1 {{ $lama ? 'bg-red-500' : 'bg-amber-400' }} rounded-t-xl -mt-4 -mx-4 mb-3"></div>
 
-                {{-- Header: No Invoice & Status Badge (sesuai pesanan / DP) --}}
-                <div class="flex items-center justify-between mb-2">
-                    <span class="font-semibold text-slate-800">{{ $t->invoice_no }}</span>
+                {{-- Header: No Invoice, Meja & Status Badge (sesuai pesanan / DP) --}}
+                <div class="flex items-center justify-between mb-2 gap-1.5 flex-wrap">
+                    <div class="flex items-center gap-1.5">
+                        <span class="font-semibold text-slate-800">{{ $t->invoice_no }}</span>
+                        @if(!empty($t->table_no))
+                        <span class="px-2 py-0.5 rounded font-extrabold text-[11px] bg-amber-100 text-amber-800 border border-amber-300">
+                            {{ $t->table_no }}
+                        </span>
+                        @endif
+                    </div>
                     <span class="px-2 py-0.5 rounded-full text-xs font-medium {{ $lama ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700' }}">
                         {{ $lama ? 'Tertahan Lama' : 'Tertahan' }}
                     </span>

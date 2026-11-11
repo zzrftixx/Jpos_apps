@@ -41,7 +41,7 @@
                 @forelse($products as $p)
                 @php $barisSatuan = 1 + $p->units->count(); @endphp
                 <tr>
-                    <td rowspan="{{ $barisSatuan }}"><img src="{{ $p->image_url }}" class="w-10 h-10 rounded object-cover bg-slate-100"></td>
+                    <td rowspan="{{ $barisSatuan }}"><img src="{{ $p->image_url }}" loading="lazy" decoding="async" class="w-10 h-10 rounded object-cover bg-slate-100"></td>
                     <td rowspan="{{ $barisSatuan }}" class="font-medium">{{ $p->name }}</td>
                     <td rowspan="{{ $barisSatuan }}" class="text-slate-500 text-xs">{{ $p->sku }}<br>{{ $p->barcode }}</td>
                     <td rowspan="{{ $barisSatuan }}">{{ $p->category->name ?? '-' }}</td>
@@ -61,7 +61,9 @@
                     </td>
                     <td>
                         @if($p->isJasa())
-                            <span class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">🛠️ Jasa</span>
+                            <span class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700 font-medium">🛠️ Jasa</span>
+                        @elseif(!$p->tracksStock())
+                            <span class="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-800 font-medium" title="Menu Tanpa Batasan Stok (Dapur / F&B)">🍳 Tanpa Stok (F&B)</span>
                         @else
                             <span class="{{ $p->isLowStock() ? 'text-red-600 font-semibold' : '' }}">@qty($p->stock)</span> {{ $p->unit }}
                         @endif
@@ -142,6 +144,31 @@
                         </label>
                     </div>
                     <p class="text-xs text-slate-400 mt-1" x-show="type === 'jasa'">Produk jasa tidak punya stok - setiap kali dijual tetap tercatat sebagai penjualan, tapi tidak mengurangi stok apa pun.</p>
+                </div>
+
+                {{-- PENGATURAN PENGELOLAAN STOK (BISA ADA STOK / TANPA STOK UNTUK KASIR F&B) --}}
+                <div x-show="type === 'barang'" class="space-y-1.5">
+                    <label class="form-label text-xs uppercase tracking-wider text-slate-500 font-bold">
+                        Pengelolaan Stok (Bisa Ada Stok / Tanpa Stok)
+                    </label>
+                    <div class="grid grid-cols-2 gap-3 text-sm">
+                        <label class="flex items-start gap-2.5 border rounded-xl p-3 cursor-pointer transition"
+                               :class="trackStock ? 'border-brand-500 bg-brand-50/50 shadow-xs' : 'border-slate-200 hover:bg-slate-50'">
+                            <input type="radio" name="track_stock" value="1" x-model.number="trackStock" :value="1" class="mt-1 text-brand-600 focus:ring-brand-500">
+                            <div>
+                                <span class="block font-semibold text-xs text-slate-800">📦 Ada Stok (Kelola Stok)</span>
+                                <span class="block text-[11px] text-slate-400 mt-0.5">Stok fisik dipantau &amp; berkurang saat terjual. Cocok untuk minuman botol/kaleng, snack kemasan, atau barang terbatas.</span>
+                            </div>
+                        </label>
+                        <label class="flex items-start gap-2.5 border rounded-xl p-3 cursor-pointer transition"
+                               :class="!trackStock ? 'border-amber-500 bg-amber-50/50 shadow-xs' : 'border-slate-200 hover:bg-slate-50'">
+                            <input type="radio" name="track_stock" value="0" x-model.number="trackStock" :value="0" class="mt-1 text-amber-600 focus:ring-amber-500">
+                            <div>
+                                <span class="block font-semibold text-xs text-slate-800">🍳 Tanpa Stok (Menu Dapur / F&B)</span>
+                                <span class="block text-[11px] text-slate-400 mt-0.5">Bebas dipesan tanpa batasan sisa stok di Kasir F&B. Cocok untuk makanan/minuman racikan dapur yang dibuat saat dipesan.</span>
+                            </div>
+                        </label>
+                    </div>
                 </div>
 
                 <template x-if="editItem">
@@ -560,11 +587,11 @@
                     </template>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3" x-show="type === 'barang'">
+                <div class="grid grid-cols-2 gap-3" x-show="type === 'barang' && trackStock">
                     <div>
                         <label class="form-label">Stok</label>
                         <div class="grid grid-cols-[1fr_7rem] gap-2">
-                            <input type="text" data-jpos-number data-number-decimals="4" x-number="stockDisplay" :required="type === 'barang'" class="form-input">
+                            <input type="text" data-jpos-number data-number-decimals="4" x-number="stockDisplay" :required="type === 'barang' && trackStock" class="form-input">
                             <select :value="stockUnit" @change="gantiSatuanStok($event.target.value)" class="form-select">
                                 <option value="base" x-text="unit"></option>
                                 <template x-for="row in unitRows" :key="row._key">
@@ -575,7 +602,7 @@
                             </select>
                         </div>
                         {{-- Yang dikirim ke server SELALU dalam satuan dasar. --}}
-                        <input type="hidden" name="stock" :value="stockBase">
+                        <input type="hidden" name="stock" :value="trackStock ? stockBase : 0">
                         <p class="text-[11px] text-slate-400 mt-1" x-show="stockUnit !== 'base'">= <span x-text="qty(stockBase)"></span> <span x-text="unit"></span></p>
                     </div>
                     <div>
@@ -584,6 +611,14 @@
                         <p class="text-[11px] text-amber-700 mt-1 leading-snug">
                             ⚠️ <strong>Batas Pengingat Stok Menipis.</strong> Kolom ini <em>bukan</em> untuk menambah stok produk. Untuk mengisi/menambah stok berjalan, isi di kolom <strong>Stok</strong> di samping atau melalui menu <strong>Pembelian / Retur</strong>.
                         </p>
+                    </div>
+                </div>
+
+                {{-- Keterangan Khusus Menu Tanpa Stok --}}
+                <div x-show="type === 'barang' && !trackStock" class="rounded-xl border border-amber-200 bg-amber-50/70 p-3 flex items-start gap-2.5">
+                    <span class="text-base leading-none">🍳</span>
+                    <div class="text-xs text-amber-800 leading-relaxed">
+                        <strong>Menu Tanpa Stok (Siap Saji):</strong> Kuantitas pesanan menu ini tidak dibatasi di Modul Kasir F&B dan tidak mengurangi stok inventori. Sangat praktis untuk masakan olahan dapur atau minuman racikan yang disiapkan langsung saat dipesan pelanggan.
                     </div>
                 </div>
 
@@ -626,6 +661,7 @@ function masterProdukApp() {
         showModal: false,
         editItem: null,
         type: 'barang',
+        trackStock: 1,
         unit: 'Pcs',
         produkMode: @json($produkMode),
         imagePreview: null,
@@ -871,6 +907,7 @@ function masterProdukApp() {
             this.imagePreview = null;
             this.editItem = item;
             this.type = item.type;
+            this.trackStock = (item.track_stock === false || item.track_stock === 0 || item.track_stock === '0') ? 0 : 1;
             this.unit = item.unit || 'Pcs';
             this.multiUnitEnabled = !!item.multi_unit_enabled;
             this.hppCalcEnabled = !!item.multi_unit_enabled;
@@ -908,6 +945,7 @@ function masterProdukApp() {
             this.imagePreview = null;
             this.editItem = null;
             this.type = 'barang';
+            this.trackStock = 1;
             this.unit = 'Pcs';
             this.multiUnitEnabled = false;
             this.hppCalcEnabled = false;

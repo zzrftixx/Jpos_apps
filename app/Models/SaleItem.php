@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SaleItem extends Model
 {
-    protected $fillable = ['sale_id', 'product_id', 'product_name', 'price', 'cost_price_snapshot', 'qty', 'unit_label', 'unit_conversion', 'returned_qty', 'subtotal'];
+    protected $fillable = ['sale_id', 'product_id', 'product_name', 'note', 'price', 'cost_price_snapshot', 'qty', 'unit_label', 'unit_conversion', 'returned_qty', 'subtotal'];
 
     /**
      * Kuantitas boleh pecahan sejak barang timbangan bisa dijual per Kg atau per Gram.

@@ -50,6 +50,79 @@ $bolehDilayani = $asli !== false
     && str_starts_with($asli, $akarPublik . DIRECTORY_SEPARATOR);
 
 if (! $bolehDilayani) {
+    $mediaRel = null;
+    if (str_starts_with($uri, '/media/')) {
+        $mediaRel = ltrim(substr($uri, 7), '/');
+    } elseif (str_starts_with($uri, '/storage/')) {
+        $mediaRel = ltrim(substr($uri, 9), '/');
+    }
+
+    if ($mediaRel !== null && $mediaRel !== '') {
+        $akarStorage = realpath(__DIR__ . '/storage/app/public');
+        $kandidatMedia = $akarStorage !== false ? realpath($akarStorage . DIRECTORY_SEPARATOR . $mediaRel) : false;
+        $isValidMedia = $kandidatMedia !== false
+            && $akarStorage !== false
+            && is_file($kandidatMedia)
+            && str_starts_with($kandidatMedia, $akarStorage . DIRECTORY_SEPARATOR);
+
+        $isPlaceholder = false;
+        if (! $isValidMedia) {
+            $kandidatMedia = realpath($publik . '/images/no-image.svg');
+            $isPlaceholder = true;
+        }
+
+        if ($kandidatMedia !== false && is_file($kandidatMedia)) {
+            $ext = strtolower(pathinfo($kandidatMedia, PATHINFO_EXTENSION));
+            $mimeMap = [
+                'jpg' => 'image/jpeg',
+                'jpeg' => 'image/jpeg',
+                'png' => 'image/png',
+                'gif' => 'image/gif',
+                'webp' => 'image/webp',
+                'svg' => 'image/svg+xml',
+                'ico' => 'image/x-icon',
+            ];
+            $mime = $mimeMap[$ext] ?? (@mime_content_type($kandidatMedia) ?: 'application/octet-stream');
+            $mtime = @filemtime($kandidatMedia) ?: 0;
+            $size = @filesize($kandidatMedia) ?: 0;
+            $etag = '"' . md5($kandidatMedia . '|' . $mtime . '|' . $size) . '"';
+            $maxAge = $isPlaceholder ? 3600 : 604800;
+
+            header('Content-Type: ' . $mime);
+            header('Cache-Control: public, max-age=' . $maxAge);
+            header('ETag: ' . $etag);
+            header('Vary: Accept-Encoding');
+
+            $ifNoneMatch = trim((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? ''));
+            if ($ifNoneMatch !== '' && ($ifNoneMatch === $etag || $ifNoneMatch === '*')) {
+                http_response_code(304);
+
+                return;
+            }
+
+            if ($ext === 'svg' && function_exists('gzencode') && stripos((string) ($_SERVER['HTTP_ACCEPT_ENCODING'] ?? ''), 'gzip') !== false) {
+                $raw = @file_get_contents($kandidatMedia);
+                if ($raw !== false) {
+                    $gz = gzencode($raw, 6);
+                    if ($gz !== false) {
+                        header('Content-Encoding: gzip');
+                        header('Content-Length: ' . strlen($gz));
+                        echo $gz;
+
+                        return;
+                    }
+                }
+            }
+
+            if ($size > 0) {
+                header('Content-Length: ' . $size);
+            }
+            readfile($kandidatMedia);
+
+            return;
+        }
+    }
+
     require_once $publik . '/index.php';
 
     return;
@@ -118,7 +191,7 @@ if ($masihSegar) {
 // Kompresi Gzip untuk teks/CSS/JS/JSON/HTML/SVG bila peramban/klien mendukung
 $dukungGzip = function_exists('gzencode')
     && isset($_SERVER['HTTP_ACCEPT_ENCODING'])
-    && str_contains($_SERVER['HTTP_ACCEPT_ENCODING'], 'gzip');
+    && stripos($_SERVER['HTTP_ACCEPT_ENCODING'], 'gzip') !== false;
 
 $kompresibel = in_array($ekstensi, ['css', 'js', 'mjs', 'json', 'html', 'htm', 'svg', 'map', 'txt', 'webmanifest'], true);
 

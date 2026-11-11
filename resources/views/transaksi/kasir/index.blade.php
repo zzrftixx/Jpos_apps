@@ -836,7 +836,7 @@ div[x-ref="daftarKeranjang"] .cart-item + .cart-item {
                         class="card kasir-product-card p-3 text-left hover:shadow-lg hover:border-brand-300 hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-none disabled:hover:translate-y-0 flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white group">
                         <div>
                             <div class="aspect-square rounded-xl overflow-hidden bg-slate-100 mb-2.5 relative">
-                                <img :src="p.image_url" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                                <img :src="p.image_url" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
                                 {{-- Badge Kategori & Terlaris di pojok kiri atas foto --}}
                                 <div class="absolute top-1.5 left-1.5 max-w-[70%] flex flex-col items-start gap-1 pointer-events-none">
                                     <template x-if="topProductIds.includes(p.id)">

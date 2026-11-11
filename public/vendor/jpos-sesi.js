@@ -25,10 +25,18 @@
 
     // Cukup rapat untuk mendeteksi tutup dengan cepat, cukup jarang untuk tidak
     // membebani server PHP yang cuma melayani satu permintaan pada satu waktu.
+    var host = (window.location && window.location.hostname) ? window.location.hostname.toLowerCase() : '';
+    var isLocalClient = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
     var JEDA_DETAK = 10000;
+    var jedaAktif = isLocalClient ? JEDA_DETAK : 30000;
 
-    var urlDetak = '/jpos-detak';
-    var urlTutup = '/jpos-tutup';
+    function metaContent(name) {
+        var el = document.querySelector('meta[name="' + name + '"]');
+        return el ? el.getAttribute('content') : '';
+    }
+
+    var urlDetak = metaContent('jpos-detak-url') || '/jpos-detak';
+    var urlTutup = metaContent('jpos-tutup-url') || '/jpos-tutup';
 
     var pengatur = null;
     var sudahPamit = false;
@@ -51,6 +59,9 @@
 
     function detak() {
         sudahPamit = false;
+        if (!isLocalClient && document.hidden) {
+            return;
+        }
         kirim(urlDetak);
     }
 
@@ -62,8 +73,9 @@
         kirim(urlTutup);
     }
 
-    detak();
-    pengatur = setInterval(detak, JEDA_DETAK);
+    // Tunda detak pertama agar tidak bersaing dengan aset awal halaman di jaringan LAN.
+    setTimeout(detak, isLocalClient ? 400 : 2500);
+    pengatur = setInterval(detak, jedaAktif);
 
     // Browser memperlambat timer di tab yang tidak terlihat sampai sekitar satu kali per
     // menit. Detak tambahan saat jendela kembali aktif membuat jeda panjang itu langsung

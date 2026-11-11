@@ -15,13 +15,14 @@ class Product extends Model
         'multi_unit_enabled', 'hpp_calc_enabled',
         'cost_price', 'sell_price', 'reseller_price', 'grosir_price',
         'wholesale_price', 'wholesale_min_qty',
-        'stock', 'min_stock', 'is_taxable',
+        'stock', 'track_stock', 'min_stock', 'is_taxable',
         'image', 'description', 'is_active',
     ];
 
     protected $casts = [
         'is_taxable' => 'boolean',
         'is_active' => 'boolean',
+        'track_stock' => 'boolean',
         'multi_unit_enabled' => 'boolean',
         'hpp_calc_enabled' => 'boolean',
         'cost_price' => 'decimal:2',
@@ -43,6 +44,11 @@ class Product extends Model
      * produknya punya gambar.
      */
     protected $appends = ['image_url'];
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
 
     public function category(): BelongsTo
     {
@@ -71,9 +77,29 @@ class Product extends Model
         return $this->hasMany(ProductUnit::class)->orderBy('sort_order')->orderBy('id');
     }
 
+    public static function resolveAppBasePath(): string
+    {
+        if (app()->runningInConsole() && ! app()->runningUnitTests()) {
+            return '';
+        }
+
+        if (! app()->bound('request')) {
+            return '';
+        }
+
+        $base = rtrim((string) request()->getBasePath(), '/');
+
+        return $base === '/' ? '' : $base;
+    }
+
+    public function rawMediaPath(): string
+    {
+        return $this->image ? '/media/' . ltrim($this->image, '/') : '/images/no-image.svg';
+    }
+
     public function getImageUrlAttribute(): string
     {
-        return $this->image ? url('media/' . $this->image) : asset('images/no-image.svg');
+        return static::resolveAppBasePath() . $this->rawMediaPath();
     }
 
     /**
@@ -98,12 +124,41 @@ class Product extends Model
 
     public function isLowStock(): bool
     {
-        return !$this->isJasa() && $this->stock <= $this->min_stock;
+        return $this->tracksStock() && $this->stock <= $this->min_stock;
     }
 
     public function isJasa(): bool
     {
         return $this->type === 'jasa';
+    }
+
+    /**
+     * Menentukan apakah produk ini melacak/mengelola stok fisik atau tanpa stok.
+     * Pada mode Kasir F&B, perilaku stok dipengaruhi juga oleh Pengaturan Stok Menu F&B.
+     */
+    public function tracksStock(?string $contextLayout = null, ?string $fnbMode = null): bool
+    {
+        if ($this->isJasa()) {
+            return false;
+        }
+
+        $layout = $contextLayout ?? Setting::kasirLayout();
+        if ($layout === 'fnb') {
+            $resolvedFnbMode = $fnbMode ?? Setting::fnbStockMode();
+            if ($resolvedFnbMode === 'all_nostock') {
+                return false;
+            }
+            if ($resolvedFnbMode === 'all_stock') {
+                return true;
+            }
+        }
+
+        return (bool) ($this->track_stock ?? true);
+    }
+
+    public function isTanpaStok(?string $contextLayout = null): bool
+    {
+        return !$this->tracksStock($contextLayout);
     }
 
     /**
@@ -117,7 +172,7 @@ class Product extends Model
         return $this->hasMany(PromotionItem::class);
     }
 
-    public function toCartArray(?array $petaSatuanTimbangan = null, ?array $petaLokasiRak = null, ?array $petaPromo = null): array
+    public function toCartArray(?array $petaSatuanTimbangan = null, ?array $petaLokasiRak = null, ?array $petaPromo = null, ?string $contextLayout = null, ?string $fnbMode = null): array
     {
         $bolehPecahan = $petaSatuanTimbangan !== null
             ? ($petaSatuanTimbangan[$this->unit] ?? false)
@@ -160,8 +215,12 @@ class Product extends Model
             // cache dan berubah menjadi __PHP_Incomplete_Class saat dibaca kembali.
             'additional_units' => $this->units->map(fn($pu) => $pu->toCartArray())->values()->all(),
             'stock' => $this->stock,
+            'track_stock' => (bool) ($this->track_stock ?? true),
+            'tracks_stock' => $this->tracksStock($contextLayout, $fnbMode),
             'category_id' => $this->category_id,
             'category_name' => $this->category?->name,
+            'category' => $this->category?->name,
+            'image' => $this->image,
             'image_url' => $this->image_url,
             'is_taxable' => $this->is_taxable,
             // Ditanam ke katalog supaya kasir bisa menjawab "ada di mana?" tanpa mencari ke

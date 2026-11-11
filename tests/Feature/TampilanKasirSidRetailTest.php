@@ -50,6 +50,49 @@ class TampilanKasirSidRetailTest extends JposTestCase
     }
 
     /**
+     * Memilih mode modern dengan list saja atau both tersimpan ke database dan ter-render di view.
+     */
+    public function test_pengaturan_tampilan_kasir_modern_mode_list_dan_both_tersimpan_dan_tampil_di_view(): void
+    {
+        // 1. Simpan layout modern dengan default_view list
+        $this->actingAs($this->admin)->post(route('pengaturan.tampilan-kasir.update'), [
+            'layout' => 'modern',
+            'default_view' => 'list',
+        ])->assertRedirect()->assertSessionHas('success');
+
+        $this->assertSame(['view' => 'list', 'toggle' => false], Setting::kasirDisplayMode());
+        $this->assertSame('modern', Setting::kasirLayout());
+
+        $htmlList = $this->actingAs($this->admin)->get(route('pengaturan.tampilan-kasir'))
+            ->assertOk()
+            ->getContent();
+        $this->assertStringContainsString("currentDefaultView: 'list'", $htmlList);
+
+        // 2. Simpan layout modern dengan default_view both
+        $this->actingAs($this->admin)->post(route('pengaturan.tampilan-kasir.update'), [
+            'layout' => 'modern',
+            'default_view' => 'both',
+        ])->assertRedirect()->assertSessionHas('success');
+
+        $this->assertSame(['view' => 'gambar', 'toggle' => true], Setting::kasirDisplayMode());
+        $this->assertSame('modern', Setting::kasirLayout());
+
+        $htmlBoth = $this->actingAs($this->admin)->get(route('pengaturan.tampilan-kasir'))
+            ->assertOk()
+            ->getContent();
+        $this->assertStringContainsString("currentDefaultView: 'both'", $htmlBoth);
+
+        // 3. Simpan layout klasik tanpa default_view, nilai default_view sebelumnya tetap dipertahankan
+        $this->actingAs($this->admin)->post(route('pengaturan.tampilan-kasir.update'), [
+            'layout' => 'klasik',
+        ])->assertRedirect()->assertSessionHas('success');
+
+        $this->assertSame('klasik', Setting::kasirLayout());
+        $kasirDisplay = Setting::get('kasir_display');
+        $this->assertSame('both', $kasirDisplay['default_view']);
+    }
+
+    /**
      * Halaman kasir menampilkan katalog produk dan keranjang secara langsung berdampingan,
      * tanpa tombol atau shortcut buka katalog F2 dan tanpa switcher layout.
      */

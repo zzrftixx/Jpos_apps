@@ -61,19 +61,50 @@ class ProductCatalog
      */
     public function forCart(): array
     {
-        $fingerprint = $this->fingerprint();
+        [$fingerprint, $contextLayout, $fnbMode] = $this->fingerprintWithDisplay();
         $store = $this->store();
         $cachedFingerprint = $store->get(self::CACHE_FINGERPRINT_KEY);
 
         if ($cachedFingerprint === $fingerprint && $store->has(self::CACHE_DATA_KEY)) {
-            return $store->get(self::CACHE_DATA_KEY);
+            $cached = $store->get(self::CACHE_DATA_KEY);
+            if (is_array($cached) && $this->isHostAgnostic($cached)) {
+                return $this->applyBasePath($cached);
+            }
         }
 
-        $data = $this->build();
+        $data = $this->build($contextLayout, $fnbMode);
         $store->put(self::CACHE_DATA_KEY, $data, self::TTL_SECONDS);
         $store->put(self::CACHE_FINGERPRINT_KEY, $fingerprint, self::TTL_SECONDS);
 
-        return $data;
+        return $this->applyBasePath($data);
+    }
+
+    private function isHostAgnostic(array $items): bool
+    {
+        if ($items === []) {
+            return true;
+        }
+
+        $url = (string) ($items[0]['image_url'] ?? '');
+
+        return ! str_starts_with($url, 'http://') && ! str_starts_with($url, 'https://');
+    }
+
+    private function applyBasePath(array $items): array
+    {
+        $base = Product::resolveAppBasePath();
+        if ($base === '') {
+            return $items;
+        }
+
+        return array_map(function (array $item) use ($base) {
+            $url = $item['image_url'] ?? '';
+            if (is_string($url) && str_starts_with($url, '/') && ! str_starts_with($url, $base . '/')) {
+                $item['image_url'] = $base . $url;
+            }
+
+            return $item;
+        }, $items);
     }
 
     /**
@@ -87,7 +118,7 @@ class ProductCatalog
         Cache::forget(self::CACHE_FINGERPRINT_KEY);
     }
 
-    private function build(): array
+    private function build(string $contextLayout = 'modern', string $fnbMode = 'per_product'): array
     {
         // Dibaca SEKALI lalu dilewatkan ke tiap produk. Tanpa ini, toCartArray() menembak
         // satu query per produk cuma untuk tahu apakah satuan dasarnya boleh dijual pecahan -
@@ -133,17 +164,23 @@ class ProductCatalog
             ->where('is_active', true)
             ->orderBy('name')
             ->get()
-            ->map(fn (Product $product) => $product->toCartArray($petaTimbangan, $petaLokasi, $petaPromo))
+            ->map(function (Product $product) use ($petaTimbangan, $petaLokasi, $petaPromo, $contextLayout, $fnbMode) {
+                $row = $product->toCartArray($petaTimbangan, $petaLokasi, $petaPromo, $contextLayout, $fnbMode);
+                $row['image_url'] = $product->rawMediaPath();
+
+                return $row;
+            })
             ->values()
             ->all();
     }
 
     /**
      * Sidik jari isi katalog.
-     * Menghitung jumlah produk, total stok, dan timestamp terbaru.
-     * Menjamin bahwa setiap perubahan produk atau kuantitas stok langsung memicu pembaruan cache.
+     * Menghitung jumlah produk, total stok, timestamp terbaru, dan mode tampilan/stok kasir.
+     *
+     * @return array{0: string, 1: string, 2: string}
      */
-    private function fingerprint(): string
+    private function fingerprintWithDisplay(): array
     {
         $products = DB::table('products')
             ->selectRaw("COUNT(*) as jumlah, COALESCE(SUM(stock), 0) as total_stok, COALESCE(MAX(updated_at), '') as terbaru")
@@ -167,7 +204,12 @@ class ProductCatalog
             ->selectRaw("COUNT(*) as jumlah, COALESCE(MAX(updated_at), '') as terbaru")
             ->first();
 
-        return md5(implode('|', [
+        $displayRaw = (string) (DB::table('settings')->where('key', 'kasir_display')->value('value') ?? '');
+        $display = $displayRaw !== '' ? (json_decode($displayRaw, true) ?? []) : [];
+        $contextLayout = is_array($display) ? (string) ($display['layout'] ?? 'modern') : 'modern';
+        $fnbMode = is_array($display) ? (string) ($display['fnb_stock_mode'] ?? 'per_product') : 'per_product';
+
+        $fingerprint = md5(implode('|', [
             $products->jumlah ?? 0,
             $products->total_stok ?? 0,
             $products->terbaru ?? '',
@@ -177,7 +219,11 @@ class ProductCatalog
             $satuan->terbaru ?? '',
             $rak->jumlah ?? 0,
             $rak->terbaru ?? '',
+            $contextLayout,
+            $fnbMode,
             now()->toDateString(),
         ]));
+
+        return [$fingerprint, $contextLayout, $fnbMode];
     }
 }
